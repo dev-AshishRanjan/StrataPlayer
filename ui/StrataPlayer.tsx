@@ -122,7 +122,7 @@ const NotificationContainer = ({ notifications }: { notifications: PlayerState['
                 <div
                     key={n.id}
                     className={`
-                        bg-black/90 backdrop-blur-md border border-white/10 text-white px-4 py-3 rounded-lg shadow-xl text-sm font-medium flex items-center gap-3 animate-in slide-in-from-left-2 fade-in duration-300 max-w-sm
+                        bg-zinc-950/80 backdrop-blur-md border border-white/10 text-white px-4 py-3 rounded-lg shadow-xl text-sm font-medium flex items-center gap-3 animate-in slide-in-from-left-2 fade-in duration-300 max-w-sm
                         ${n.type === 'error' ? 'border-red-500/50 text-red-100' : ''}
                         ${n.type === 'warning' ? 'border-amber-500/50 text-amber-100' : ''}
                     `}
@@ -159,7 +159,7 @@ const Menu = ({ children, onClose, align = 'right' }: { children?: React.ReactNo
 
     return (
         <div
-            className={`absolute bottom-full mb-3 ${positionClasses} bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans`}
+            className={`absolute bottom-full mb-3 ${positionClasses} bg-zinc-950/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans`}
             onClick={(e) => e.stopPropagation()}
         >
             <div
@@ -179,7 +179,7 @@ const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => 
 
     return (
         <div
-            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 origin-bottom bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans"
+            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 origin-bottom bg-zinc-950/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans"
             onClick={(e) => e.stopPropagation()}
         >
             <div className="px-4 py-3 border-b border-white/10 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5">
@@ -220,19 +220,19 @@ const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => 
 }
 
 const MenuItem = ({ label, value, active, onClick, hasSubmenu }: any) => (
-    <button onClick={onClick} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10 transition-colors text-left text-zinc-200 active:bg-white/5 focus:outline-none focus:bg-white/10 group">
-        <span className={`flex-1 font-medium ${active ? 'text-indigo-400' : ''}`}>{label}</span>
-        <div className="flex items-center gap-2 text-zinc-400">
-            <span className="text-xs font-medium">{value}</span>
-            {active && <CheckIcon className="w-4 h-4 text-indigo-500" />}
-            {hasSubmenu && <span className="text-xs group-hover:translate-x-0.5 transition-transform text-zinc-500">›</span>}
+    <button onClick={onClick} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10 transition-colors text-left text-zinc-200 active:bg-white/5 focus:outline-none focus:bg-white/10 group overflow-hidden">
+        <span className={`flex-1 font-medium truncate pr-4 ${active ? 'text-indigo-400' : ''}`} title={label}>{label}</span>
+        <div className="flex items-center gap-2 text-zinc-400 shrink-0">
+            {value && <span className="text-xs font-medium truncate max-w-[60px]" title={value}>{value}</span>}
+            {active && <CheckIcon className="w-4 h-4 text-indigo-500 shrink-0" />}
+            {hasSubmenu && <span className="text-xs group-hover:translate-x-0.5 transition-transform text-zinc-500 shrink-0">›</span>}
         </div>
     </button>
 );
 
 const MenuHeader = ({ label, onBack }: { label: string, onBack: () => void }) => (
     <button
-        className="w-full px-4 py-3 text-[11px] font-bold text-zinc-400 uppercase tracking-wider border-b border-white/10 flex items-center gap-2 hover:bg-white/5 transition-colors focus:outline-none sticky top-0 bg-zinc-950/95 z-10 backdrop-blur-sm"
+        className="w-full px-4 py-3 text-[11px] font-bold text-zinc-400 uppercase tracking-wider border-b border-white/10 flex items-center gap-2 hover:bg-white/5 transition-colors focus:outline-none sticky top-0 bg-zinc-950/60 backdrop-blur-xl z-10"
         onClick={onBack}
     >
         <ArrowLeftIcon className="w-3 h-3" />

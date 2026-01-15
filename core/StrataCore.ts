@@ -320,17 +320,38 @@ export class StrataCore {
   }
 
   public addTextTrack(file: File, label: string) {
-    const url = URL.createObjectURL(file);
-    this.addTextTrackInternal(url, label, 'user', true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (!e.target?.result) return;
+      let content = e.target.result as string;
 
-    setTimeout(() => {
-      const tracks = this.store.get().subtitleTracks;
-      const newTrackIndex = tracks.findIndex(t => t.label === label);
-      if (newTrackIndex !== -1) {
-        this.setSubtitle(newTrackIndex);
-        this.notify({ type: 'success', message: 'Subtitle uploaded', duration: 3000 });
+      // Basic SRT to VTT conversion
+      if (file.name.toLowerCase().endsWith('.srt') || !content.trim().startsWith('WEBVTT')) {
+        // Replace timestamp commas with dots: 00:00:00,000 -> 00:00:00.000
+        content = content.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+        // Add header
+        if (!content.trim().startsWith('WEBVTT')) {
+          content = 'WEBVTT\n\n' + content;
+        }
       }
-    }, 200);
+
+      const blob = new Blob([content], { type: 'text/vtt' });
+      const url = URL.createObjectURL(blob);
+      this.addTextTrackInternal(url, label, 'user', true);
+
+      setTimeout(() => {
+        const tracks = this.store.get().subtitleTracks;
+        const newTrackIndex = tracks.findIndex(t => t.label === label);
+        if (newTrackIndex !== -1) {
+          this.setSubtitle(newTrackIndex);
+          this.notify({ type: 'success', message: 'Subtitle uploaded', duration: 3000 });
+        }
+      }, 200);
+    };
+    reader.onerror = () => {
+      this.notify({ type: 'error', message: 'Failed to read file', duration: 3000 });
+    };
+    reader.readAsText(file);
   }
 
   private addTextTrackInternal(src: string, label: string, lang: string = '', isDefault: boolean = false) {
