@@ -14,20 +14,21 @@ interface VideoSource {
 
 const SOURCES: VideoSource[] = [
     {
-        name: "Tears of Steel (Multi-Audio + Subs)",
+        name: "Tears of Steel (Multi-Audio)",
         src: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
-        desc: "HLS stream featuring surround sound, multiple audio tracks (En/De), and embedded subtitles.",
-        tags: ["HLS", "Multi-Audio", "Embedded Subs"]
+        desc: "High-quality HLS stream with multiple audio tracks (En, De, Fr, Es) and subtitles.",
+        tags: ["HLS", "Multi-Audio", "Subs"]
     },
     {
         name: "Sintel (External Subs & Thumbnails)",
         src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-        desc: "MP4 file with external VTT subtitles (English/Spanish) and seek-bar thumbnails.",
+        desc: "MP4 file with verified external VTT subtitles and thumbnail sprites.",
         tags: ["MP4", "VTT Subs", "Thumbnails"],
-        thumbnails: "https://raw.githubusercontent.com/monteiro/learning-widgets/master/jwplayer/thumbnails-sprite.vtt",
+        thumbnails: "https://bitdash-a.akamaihd.net/content/sintel/hls/sprites/sprite.vtt",
         tracks: [
-            { kind: 'subtitles', label: 'English', src: 'https://raw.githubusercontent.com/andreyvit/subtitle-tools/master/sample.vtt', srcLang: 'en', default: true },
-            { kind: 'subtitles', label: 'Spanish', src: 'https://raw.githubusercontent.com/andreyvit/subtitle-tools/master/sample.vtt', srcLang: 'es' }
+            { kind: 'subtitles', label: 'English', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_en.vtt', srcLang: 'en', default: true },
+            { kind: 'subtitles', label: 'Spanish', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_es.vtt', srcLang: 'es' },
+            { kind: 'subtitles', label: 'French', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_fr.vtt', srcLang: 'fr' }
         ]
     },
     {
@@ -37,10 +38,10 @@ const SOURCES: VideoSource[] = [
         tags: ["HLS", "ABR"]
     },
     {
-        name: "Vertical Video (Mobile)",
-        src: "https://stream.mux.com/6fi010267Q400m00D6005008500b300N332s00F00/master.m3u8",
-        desc: "9:16 aspect ratio video to test layout responsiveness.",
-        tags: ["HLS", "9:16"]
+        name: "Broken Stream (Test Retry)",
+        src: "https://httpstat.us/404",
+        desc: "Intentionally broken URL to test the 5-step verbose retry logic.",
+        tags: ["Error Test"]
     }
 ];
 

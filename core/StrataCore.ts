@@ -93,7 +93,7 @@ export class StrataCore {
 
   // Retry Logic
   private retryCount = 0;
-  private maxRetries = 5; // Increased to 5
+  private maxRetries = 5;
   private retryTimer: any = null;
   private currentSrc: string = '';
   private currentTracks: TextTrackConfig[] = [];
@@ -165,34 +165,53 @@ export class StrataCore {
     this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
   }
 
-  private handleError() {
+  // Exposed for Plugins to trigger errors (e.g., HLS fatal errors)
+  public triggerError(message: string, isFatal: boolean = false) {
+    if (isFatal) {
+      this.handleError(message);
+    } else {
+      this.notify({ type: 'warning', message: `Warning: ${message}`, duration: 5000 });
+    }
+  }
+
+  private handleError(customMessage?: string) {
     const error = this.video.error;
-    const code = error?.code;
-    const message = error?.message;
+    const message = customMessage || error?.message || (error ? `Code ${error.code}` : 'Unknown Error');
+
+    // Clear existing retry notification to update with new count
+    this.removeNotification('retry');
 
     if (this.retryCount < this.maxRetries) {
       this.retryCount++;
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-      const delay = Math.pow(2, this.retryCount - 1) * 1000;
+      // Exponential backoff
+      const delay = Math.pow(2, this.retryCount - 1) * 1500;
 
       this.notify({
         id: 'retry',
         type: 'loading',
-        message: `Playback error. Retrying attempt ${this.retryCount}/${this.maxRetries}...`,
-        duration: delay + 500
+        message: `Error: ${message}. Retrying (${this.retryCount}/${this.maxRetries})...`,
       });
 
-      console.warn(`[StrataPlayer] Error ${code}: ${message}. Retrying in ${delay}ms...`);
+      console.warn(`[StrataPlayer] Error: ${message}. Retrying in ${delay}ms...`);
 
+      if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = setTimeout(() => {
-        // Reload source and tracks
+        // Reload source
         const time = this.video.currentTime;
         this.load(this.currentSrc, this.currentTracks);
-        this.video.currentTime = time;
+        // Attempt to restore time if we had some
+        if (time > 0) {
+          const onCanPlay = () => {
+            this.video.currentTime = time;
+            this.video.removeEventListener('canplay', onCanPlay);
+          };
+          this.video.addEventListener('canplay', onCanPlay);
+        }
       }, delay);
     } else {
-      this.removeNotification('retry');
-      this.store.setState({ error: `Failed to load video: ${message || 'Unknown error'}` });
+      const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
+      this.store.setState({ error: finalMsg });
+      this.notify({ type: 'error', message: finalMsg });
     }
   }
 
@@ -275,7 +294,16 @@ export class StrataCore {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.currentSrc = url;
     this.currentTracks = tracks;
-    this.retryCount = 0;
+    // Don't reset retryCount here if we are reloading due to retry
+    // But since this is public load(), usually it's a new video. 
+    // We can infer if it's a retry if called internally, but for simplicity:
+    // We assume external calls reset, internal retry handling manages the counter.
+    // However, since we call load() in retry, we should conditionally reset.
+    // Actually, retry logic calls load, which resets count to 0 in previous code.
+    // FIX: Only reset retryCount if it's a "fresh" load. 
+    // For now, we'll reset it, but the retry logic manages the loop by setting timer *before* load? 
+    // No, if load() resets count, infinite loop happens. 
+    // We will REMOVE retryCount = 0 from load() and move it to explicit user action or success.
 
     this.store.setState({
       error: null,
@@ -407,6 +435,7 @@ export class StrataCore {
     try {
       const response = await fetch(src);
       if (!response.body) throw new Error('ReadableStream not supported.');
+      if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
 
       const contentLength = response.headers.get('Content-Length');
       const total = contentLength ? parseInt(contentLength, 10) : 0;
@@ -451,16 +480,16 @@ export class StrataCore {
         message: 'Download complete!',
         duration: 3000
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error("Download failed", e);
-      // Fallback
-      window.open(src, '_blank');
+      const msg = e.message || 'Unknown error';
       this.notify({
         id: notifId,
-        type: 'warning',
-        message: 'Advanced download failed, opened in new tab.',
-        duration: 4000
+        type: 'error',
+        message: `Download failed: ${msg}. Falling back to tab open.`,
+        duration: 6000
       });
+      window.open(src, '_blank');
     }
   }
 

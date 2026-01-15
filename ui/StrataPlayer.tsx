@@ -30,9 +30,12 @@ interface ThumbnailCue {
     xywh?: string;
 }
 
-const parseVTT = async (url: string): Promise<ThumbnailCue[]> => {
+const parseVTT = async (url: string, notify: (msg: any) => void): Promise<ThumbnailCue[]> => {
     try {
-        const text = await (await fetch(url)).text();
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+        const text = await res.text();
         const lines = text.split('\n');
         const cues: ThumbnailCue[] = [];
         let start: number | null = null;
@@ -60,23 +63,19 @@ const parseVTT = async (url: string): Promise<ThumbnailCue[]> => {
                 start = parseTime(times[0].trim());
                 end = parseTime(times[1].trim());
             } else if (start !== null && end !== null && line.length > 0) {
-                // Line contains URL and optionally xywh
-                // Example: thumb.jpg#xywh=0,0,120,68
                 const [urlPart, hash] = line.split('#');
                 let xywh = undefined;
                 if (hash && hash.startsWith('xywh=')) {
                     xywh = hash.replace('xywh=', '');
                 }
-
-                // If url is relative, we might need to resolve it against the VTT url (not implemented for simpilicity, assumed absolute or simple relative)
                 cues.push({ start, end, url: line, xywh });
                 start = null;
                 end = null;
             }
         }
         return cues;
-    } catch (e) {
-        console.error("Failed to parse thumbnail VTT", e);
+    } catch (e: any) {
+        notify({ type: 'warning', message: `Failed to load thumbnails: ${e.message}`, duration: 5000 });
         return [];
     }
 };
@@ -170,6 +169,10 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     const [isScrubbing, setIsScrubbing] = useState(false);
     const [scrubbingTime, setScrubbingTime] = useState(0);
 
+    // Volume Scrubbing State
+    const [isVolumeScrubbing, setIsVolumeScrubbing] = useState(false);
+    const [showVolumeTooltip, setShowVolumeTooltip] = useState(false);
+
     // Thumbnails & Hover State
     const [thumbnailCues, setThumbnailCues] = useState<ThumbnailCue[]>([]);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -219,12 +222,27 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
 
     // Parse Thumbnails
     useEffect(() => {
-        if (thumbnails) {
-            parseVTT(thumbnails).then(setCues => setThumbnailCues(setCues));
+        if (thumbnails && player) {
+            parseVTT(thumbnails, player.notify.bind(player)).then(setCues => setThumbnailCues(setCues));
         } else {
             setThumbnailCues([]);
         }
-    }, [thumbnails]);
+    }, [thumbnails, player]);
+
+    // Check external tracks fetch status
+    useEffect(() => {
+        if (textTracks && player) {
+            textTracks.forEach(track => {
+                fetch(track.src).then(res => {
+                    if (!res.ok) {
+                        player.notify({ type: 'warning', message: `Failed to load subtitle track '${track.label}': ${res.statusText}`, duration: 5000 });
+                    }
+                }).catch(e => {
+                    player.notify({ type: 'warning', message: `Failed to connect to subtitle track '${track.label}'`, duration: 5000 });
+                });
+            });
+        }
+    }, [textTracks, player]);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -280,11 +298,11 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
         }, 2500);
     };
 
-    // --- Seek Logic Rewritten ---
+    // --- Seek Logic ---
     const calculateTimeFromEvent = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
-        const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+        const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
         const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
         return pct * state.duration;
     };
@@ -314,13 +332,39 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
         document.addEventListener('touchend', handleUp);
     };
 
-    // --- Volume Logic Rewritten ---
-    const handleVolumeChange = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!volumeBarRef.current || !player) return;
+    // --- Volume Logic (Grab and Slide) ---
+    const calculateVolumeFromEvent = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
+        if (!volumeBarRef.current) return 0;
         const rect = volumeBarRef.current.getBoundingClientRect();
-        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
         const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        player.setVolume(pct);
+        return pct;
+    };
+
+    const handleVolumeStart = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!player) return;
+        setIsVolumeScrubbing(true);
+        setShowVolumeTooltip(true);
+        const vol = calculateVolumeFromEvent(e);
+        player.setVolume(vol);
+
+        const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+            player.setVolume(calculateVolumeFromEvent(moveEvent));
+        };
+
+        const handleUp = () => {
+            setIsVolumeScrubbing(false);
+            setShowVolumeTooltip(false);
+            document.removeEventListener('mousemove', handleMove);
+            document.removeEventListener('touchmove', handleMove);
+            document.removeEventListener('mouseup', handleUp);
+            document.removeEventListener('touchend', handleUp);
+        };
+
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('touchmove', handleMove);
+        document.addEventListener('mouseup', handleUp);
+        document.addEventListener('touchend', handleUp);
     };
 
     const handleProgressMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -435,7 +479,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 <h3 className="text-xl font-bold text-white">Playback Error</h3>
                                 <p className="text-zinc-400">{state.error}</p>
                                 <button
-                                    onClick={() => player.load(player.video.src)}
+                                    onClick={() => player.load(player.video.src, textTracks)}
                                     className="px-6 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 transition-colors mt-2"
                                 >
                                     Try Again
@@ -510,7 +554,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                         height: '90px',
                                                         backgroundImage: `url(${currentThumbnail.url.split('#')[0]})`,
                                                         backgroundPosition: `-${currentThumbnail.xywh.split(',')[0]}px -${currentThumbnail.xywh.split(',')[1]}px`,
-                                                        backgroundSize: 'cover' // Note: For sprite sheets, you typically need to know total w/h to set backgroundSize correctly, assuming simple sprite here
+                                                        backgroundSize: 'cover'
                                                     }}
                                                 />
                                             ) : (
@@ -577,8 +621,9 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
 
                                     <div
                                         ref={volumeBarRef}
-                                        className="relative w-0 group-hover/vol:w-16 md:group-hover/vol:w-24 transition-all duration-300 h-6 flex items-center cursor-pointer"
-                                        onClick={handleVolumeChange}
+                                        className="relative w-0 group-hover/vol:w-16 md:group-hover/vol:w-24 transition-all duration-300 h-6 flex items-center cursor-pointer group/vb overflow-hidden"
+                                        onMouseDown={handleVolumeStart}
+                                        onTouchStart={handleVolumeStart}
                                     >
                                         <div className="w-full h-1 bg-white/30 rounded-full overflow-hidden">
                                             <div
@@ -586,6 +631,20 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                 style={{ width: `${(state.isMuted ? 0 : state.volume) * 100}%` }}
                                             ></div>
                                         </div>
+                                        <div
+                                            className={`absolute h-3 w-3 bg-white rounded-full shadow-md top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-100 ${isVolumeScrubbing || showVolumeTooltip ? 'scale-100' : 'scale-0 group-hover/vb:scale-100'}`}
+                                            style={{ left: `${(state.isMuted ? 0 : state.volume) * 100}%`, transform: `translate(-50%, -50%) ${isVolumeScrubbing || showVolumeTooltip ? 'scale(1)' : ''}` }}
+                                        />
+
+                                        {/* Volume Tooltip */}
+                                        {(isVolumeScrubbing || showVolumeTooltip) && (
+                                            <div
+                                                className="absolute bottom-full mb-3 bg-black/90 border border-white/10 px-2 py-1 rounded text-xs font-mono text-white shadow-lg pointer-events-none"
+                                                style={{ left: `${(state.isMuted ? 0 : state.volume) * 100}%`, transform: 'translateX(-50%)' }}
+                                            >
+                                                {state.isMuted ? '0%' : `${Math.round(state.volume * 100)}%`}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

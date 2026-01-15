@@ -85,17 +85,11 @@ export class HlsPlugin implements IPlugin {
 
     this.hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
       if (data.fatal) {
-        switch (data.type) {
-          case window.Hls.ErrorTypes.NETWORK_ERROR:
-            this.hls.startLoad();
-            break;
-          case window.Hls.ErrorTypes.MEDIA_ERROR:
-            this.hls.recoverMediaError();
-            break;
-          default:
-            this.hls.destroy();
-            break;
-        }
+        // Pass fatal errors to Core to handle the retry loop visibly
+        const msg = data.details || 'Unknown HLS Error';
+        this.core!.triggerError(msg, true);
+
+        // Cleanup if needed, but core.load() will eventually destroy and re-init this plugin
       }
     });
   }
