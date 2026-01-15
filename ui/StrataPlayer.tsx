@@ -1,18 +1,10 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react';
-import { StrataCore, PlayerState, INITIAL_STATE } from '../core/StrataCore';
+import { StrataCore, PlayerState, INITIAL_STATE, TextTrackConfig } from '../core/StrataCore';
 import { HlsPlugin } from '../plugins/HlsPlugin';
 import { PlayIcon, PauseIcon, VolumeIcon, MaximizeIcon, MinimizeIcon, SettingsIcon, CheckIcon, PipIcon, SubtitleIcon, DownloadIcon, ReplayIcon, ForwardIcon, ArrowLeftIcon } from './Icons';
 
 declare module 'react' {
-    namespace JSX {
-        interface IntrinsicElements {
-            'google-cast-launcher': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
-        }
-    }
-}
-
-declare global {
     namespace JSX {
         interface IntrinsicElements {
             'google-cast-launcher': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
@@ -28,6 +20,65 @@ const formatTime = (seconds: number) => {
     const s = Math.floor(seconds % 60);
     if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// WebVTT Parser for Thumbnails
+interface ThumbnailCue {
+    start: number;
+    end: number;
+    url: string;
+    xywh?: string;
+}
+
+const parseVTT = async (url: string): Promise<ThumbnailCue[]> => {
+    try {
+        const text = await (await fetch(url)).text();
+        const lines = text.split('\n');
+        const cues: ThumbnailCue[] = [];
+        let start: number | null = null;
+        let end: number | null = null;
+
+        // Time regex: 00:00:00.000 or 00:00.000
+        const parseTime = (t: string) => {
+            const parts = t.split(':');
+            let s = 0;
+            if (parts.length === 3) {
+                s += parseFloat(parts[0]) * 3600;
+                s += parseFloat(parts[1]) * 60;
+                s += parseFloat(parts[2]);
+            } else {
+                s += parseFloat(parts[0]) * 60;
+                s += parseFloat(parts[1]);
+            }
+            return s;
+        };
+
+        for (let line of lines) {
+            line = line.trim();
+            if (line.includes('-->')) {
+                const times = line.split('-->');
+                start = parseTime(times[0].trim());
+                end = parseTime(times[1].trim());
+            } else if (start !== null && end !== null && line.length > 0) {
+                // Line contains URL and optionally xywh
+                // Example: thumb.jpg#xywh=0,0,120,68
+                const [urlPart, hash] = line.split('#');
+                let xywh = undefined;
+                if (hash && hash.startsWith('xywh=')) {
+                    xywh = hash.replace('xywh=', '');
+                }
+
+                // If url is relative, we might need to resolve it against the VTT url (not implemented for simpilicity, assumed absolute or simple relative)
+                cues.push({ start, end, url: line, xywh });
+                start = null;
+                end = null;
+            }
+        }
+        return cues;
+    } catch (e) {
+        console.error("Failed to parse thumbnail VTT", e);
+        return [];
+    }
 };
 
 // --- Components ---
@@ -96,9 +147,11 @@ interface StrataPlayerProps {
     src: string;
     poster?: string;
     autoPlay?: boolean;
+    thumbnails?: string; // URL to VTT thumbnails
+    textTracks?: TextTrackConfig[];
 }
 
-export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
+export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: StrataPlayerProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
 
@@ -112,12 +165,16 @@ export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
     const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'subtitles' | 'audio' | 'boost'>('main');
-    const [hoverTime, setHoverTime] = useState<number | null>(null);
-    const [hoverPos, setHoverPos] = useState<number>(0);
 
     // Seek & Scrubbing State
     const [isScrubbing, setIsScrubbing] = useState(false);
     const [scrubbingTime, setScrubbingTime] = useState(0);
+
+    // Thumbnails & Hover State
+    const [thumbnailCues, setThumbnailCues] = useState<ThumbnailCue[]>([]);
+    const [hoverTime, setHoverTime] = useState<number | null>(null);
+    const [hoverPos, setHoverPos] = useState<number>(0);
+    const [currentThumbnail, setCurrentThumbnail] = useState<ThumbnailCue | null>(null);
 
     // Gesture State
     const [seekAnimation, setSeekAnimation] = useState<{ type: 'forward' | 'rewind', id: number } | null>(null);
@@ -148,9 +205,9 @@ export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
     // Handle src changes & Autoplay
     useEffect(() => {
         if (player && src) {
-            player.load(src);
+            player.load(src, textTracks);
         }
-    }, [src, player]);
+    }, [src, textTracks, player]);
 
     useEffect(() => {
         if (player && autoPlay) {
@@ -159,6 +216,15 @@ export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
             player.play().catch(() => { });
         }
     }, [player, autoPlay]);
+
+    // Parse Thumbnails
+    useEffect(() => {
+        if (thumbnails) {
+            parseVTT(thumbnails).then(setCues => setThumbnailCues(setCues));
+        } else {
+            setThumbnailCues([]);
+        }
+    }, [thumbnails]);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -261,8 +327,15 @@ export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
         if (!state.duration) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const percent = (e.clientX - rect.left) / rect.width;
+        const time = percent * state.duration;
         setHoverPos(percent * 100);
-        setHoverTime(percent * state.duration);
+        setHoverTime(time);
+
+        // Find Thumbnail
+        if (thumbnailCues.length > 0) {
+            const cue = thumbnailCues.find(c => time >= c.start && time < c.end);
+            setCurrentThumbnail(cue || null);
+        }
     };
 
     // Skip Button Animation Handler
@@ -417,17 +490,44 @@ export const StrataPlayer = ({ src, poster, autoPlay }: StrataPlayerProps) => {
                             ref={progressBarRef}
                             className="relative w-full h-4 group/slider mb-2 cursor-pointer touch-none flex items-center py-2"
                             onMouseMove={handleProgressMove}
-                            onMouseLeave={() => setHoverTime(null)}
+                            onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }}
                             onMouseDown={handleSeekStart}
                             onTouchStart={handleSeekStart}
                         >
-                            {/* Hover Tooltip */}
+                            {/* Hover Tooltip & Thumbnail */}
                             {hoverTime !== null && (
                                 <div
-                                    className="absolute bottom-full mb-3 bg-black/90 border border-white/10 px-2 py-1 rounded text-xs font-mono text-white pointer-events-none transform -translate-x-1/2 whitespace-nowrap z-40 hidden md:block shadow-lg"
+                                    className="absolute bottom-full mb-3 flex flex-col items-center transform -translate-x-1/2 z-40 hidden md:flex pointer-events-none transition-all duration-150 ease-out"
                                     style={{ left: `${hoverPos}%` }}
                                 >
-                                    {formatTime(hoverTime)}
+                                    {/* Thumbnail Preview */}
+                                    {currentThumbnail && (
+                                        <div className="mb-2 p-1 bg-black border border-white/20 rounded shadow-xl overflow-hidden">
+                                            {currentThumbnail.xywh ? (
+                                                <div
+                                                    style={{
+                                                        width: '160px',
+                                                        height: '90px',
+                                                        backgroundImage: `url(${currentThumbnail.url.split('#')[0]})`,
+                                                        backgroundPosition: `-${currentThumbnail.xywh.split(',')[0]}px -${currentThumbnail.xywh.split(',')[1]}px`,
+                                                        backgroundSize: 'cover' // Note: For sprite sheets, you typically need to know total w/h to set backgroundSize correctly, assuming simple sprite here
+                                                    }}
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={currentThumbnail.url}
+                                                    alt="Thumbnail"
+                                                    className="w-40 h-auto rounded-sm object-cover"
+                                                    style={{ aspectRatio: '16/9' }}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Time Label */}
+                                    <div className="bg-black/90 border border-white/10 px-2 py-1 rounded text-xs font-mono text-white shadow-lg">
+                                        {formatTime(hoverTime)}
+                                    </div>
                                 </div>
                             )}
 

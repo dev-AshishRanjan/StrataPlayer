@@ -75,6 +75,14 @@ export interface IPlugin {
   destroy?(): void;
 }
 
+export interface TextTrackConfig {
+  kind: 'subtitles' | 'captions' | 'descriptions' | 'chapters' | 'metadata';
+  label: string;
+  src: string;
+  srcLang: string;
+  default?: boolean;
+}
+
 export class StrataCore {
   public video: HTMLVideoElement;
   public container: HTMLElement | null = null;
@@ -85,9 +93,10 @@ export class StrataCore {
 
   // Retry Logic
   private retryCount = 0;
-  private maxRetries = 3;
+  private maxRetries = 5; // Increased to 5
   private retryTimer: any = null;
   private currentSrc: string = '';
+  private currentTracks: TextTrackConfig[] = [];
 
   constructor(videoElement?: HTMLVideoElement) {
     this.video = videoElement || document.createElement('video');
@@ -126,12 +135,21 @@ export class StrataCore {
     this.video.addEventListener('playing', () => s({ isBuffering: false }));
     this.video.addEventListener('loadeddata', () => {
       s({ isBuffering: false });
-      this.retryCount = 0; // Reset retries on success
+      this.retryCount = 0;
       this.removeNotification('retry');
     });
     this.video.addEventListener('canplay', () => s({ isBuffering: false }));
 
-    this.video.addEventListener('timeupdate', () => s({ currentTime: this.video.currentTime }));
+    // Fix bounce back: Don't update time from video if we are actively seeking
+    this.video.addEventListener('timeupdate', () => {
+      if (!this.video.seeking) {
+        s({ currentTime: this.video.currentTime });
+      }
+    });
+
+    // Ensure state syncs when seek completes
+    this.video.addEventListener('seeked', () => s({ currentTime: this.video.currentTime }));
+
     this.video.addEventListener('durationchange', () => s({ duration: this.video.duration }));
     this.video.addEventListener('volumechange', () => s({ volume: this.video.volume, isMuted: this.video.muted }));
     this.video.addEventListener('ratechange', () => s({ playbackRate: this.video.playbackRate }));
@@ -152,11 +170,10 @@ export class StrataCore {
     const code = error?.code;
     const message = error?.message;
 
-    // Aborted or Decoded errors usually don't need retry unless source is bad, 
-    // Network (2) and SrcNotSupported (4) are candidates.
     if (this.retryCount < this.maxRetries) {
       this.retryCount++;
-      const delay = Math.pow(2, this.retryCount) * 1000;
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+      const delay = Math.pow(2, this.retryCount - 1) * 1000;
 
       this.notify({
         id: 'retry',
@@ -168,9 +185,9 @@ export class StrataCore {
       console.warn(`[StrataPlayer] Error ${code}: ${message}. Retrying in ${delay}ms...`);
 
       this.retryTimer = setTimeout(() => {
-        // Reload source
+        // Reload source and tracks
         const time = this.video.currentTime;
-        this.load(this.currentSrc);
+        this.load(this.currentSrc, this.currentTracks);
         this.video.currentTime = time;
       }, delay);
     } else {
@@ -191,12 +208,17 @@ export class StrataCore {
   }
 
   private updateSubtitles() {
-    const tracks = Array.from(this.video.textTracks).map((track, index) => ({
-      label: track.label || `Track ${index + 1}`,
-      language: track.language,
-      index: index
-    }));
-    this.store.setState({ subtitleTracks: tracks });
+    // Small timeout to allow tracks to fully register
+    setTimeout(() => {
+      const tracks = Array.from(this.video.textTracks)
+        .filter(t => t.kind === 'subtitles' || t.kind === 'captions')
+        .map((track, index) => ({
+          label: track.label || track.language || `Track ${index + 1}`,
+          language: track.language,
+          index: index
+        }));
+      this.store.setState({ subtitleTracks: tracks });
+    }, 50);
   }
 
   // --- Notification System ---
@@ -206,7 +228,6 @@ export class StrataCore {
     const newNotification: Notification = { ...n, id };
 
     const current = this.store.get().notifications;
-    // Replace if id exists, else push
     const index = current.findIndex(x => x.id === id);
     let updated = [];
     if (index >= 0) {
@@ -250,13 +271,40 @@ export class StrataCore {
     this.plugins.set(plugin.name, plugin);
   }
 
-  load(url: string) {
+  load(url: string, tracks: TextTrackConfig[] = []) {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.currentSrc = url;
+    this.currentTracks = tracks;
     this.retryCount = 0;
 
-    this.store.setState({ error: null, isBuffering: true, qualityLevels: [], audioTracks: [] });
+    this.store.setState({
+      error: null,
+      isBuffering: true,
+      qualityLevels: [],
+      audioTracks: [],
+      subtitleTracks: []
+    });
+
     this.events.emit('load', url);
+
+    // Remove old tracks
+    const oldTracks = this.video.getElementsByTagName('track');
+    while (oldTracks.length > 0) {
+      oldTracks[0].remove();
+    }
+
+    // Add new tracks
+    if (tracks.length > 0) {
+      tracks.forEach(t => {
+        const track = document.createElement('track');
+        track.kind = t.kind;
+        track.label = t.label;
+        track.src = t.src;
+        track.srclang = t.srcLang;
+        if (t.default) track.default = true;
+        this.video.appendChild(track);
+      });
+    }
 
     if (!url.includes('.m3u8')) {
       this.video.src = url;
@@ -269,7 +317,10 @@ export class StrataCore {
 
   seek(time: number) {
     if (isNaN(time)) return;
-    this.video.currentTime = Math.max(0, Math.min(time, this.video.duration));
+    const t = Math.max(0, Math.min(time, this.video.duration));
+    // Optimistic UI update to prevent bounce back
+    this.store.setState({ currentTime: t });
+    this.video.currentTime = t;
   }
 
   skip(seconds: number) {
@@ -325,7 +376,10 @@ export class StrataCore {
   setSubtitle(index: number) {
     this.store.setState({ currentSubtitle: index });
     Array.from(this.video.textTracks).forEach((track, i) => {
-      track.mode = i === index ? 'showing' : 'hidden';
+      // HLS.js tracks vs Native tracks handling can vary, simply toggle mode
+      if (track.kind === 'subtitles' || track.kind === 'captions') {
+        track.mode = i === index ? 'showing' : 'hidden';
+      }
     });
   }
 
@@ -414,6 +468,10 @@ export class StrataCore {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.video.pause();
     this.video.src = '';
+    // Clear tracks
+    const oldTracks = this.video.getElementsByTagName('track');
+    while (oldTracks.length > 0) oldTracks[0].remove();
+
     this.events.destroy();
     this.store.destroy();
     this.plugins.forEach(p => p.destroy && p.destroy());

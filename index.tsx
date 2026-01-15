@@ -3,29 +3,43 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { StrataPlayer } from './ui/StrataPlayer';
 
-const SOURCES = [
+interface VideoSource {
+    name: string;
+    src: string;
+    desc: string;
+    tags: string[];
+    thumbnails?: string;
+    tracks?: { kind: 'subtitles' | 'captions' | 'descriptions' | 'chapters' | 'metadata', label: string, src: string, srcLang: string, default?: boolean }[];
+}
+
+const SOURCES: VideoSource[] = [
     {
-        name: "Big Buck Bunny (HLS)",
-        src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-        desc: "High quality HLS stream with multiple quality levels.",
-        tags: ["HLS", "Multi-Quality"]
-    },
-    {
-        name: "Tears of Steel (HLS Multi-Audio)",
+        name: "Tears of Steel (Multi-Audio + Subs)",
         src: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
-        desc: "Complex HLS stream with multiple audio tracks and subtitles.",
-        tags: ["HLS", "Surround 5.1", "Subs"]
+        desc: "HLS stream featuring surround sound, multiple audio tracks (En/De), and embedded subtitles.",
+        tags: ["HLS", "Multi-Audio", "Embedded Subs"]
     },
     {
-        name: "Sintel (MP4)",
+        name: "Sintel (External Subs & Thumbnails)",
         src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-        desc: "Direct MP4 file. Good for testing download.",
-        tags: ["MP4", "Direct File"]
+        desc: "MP4 file with external VTT subtitles (English/Spanish) and seek-bar thumbnails.",
+        tags: ["MP4", "VTT Subs", "Thumbnails"],
+        thumbnails: "https://raw.githubusercontent.com/monteiro/learning-widgets/master/jwplayer/thumbnails-sprite.vtt",
+        tracks: [
+            { kind: 'subtitles', label: 'English', src: 'https://raw.githubusercontent.com/andreyvit/subtitle-tools/master/sample.vtt', srcLang: 'en', default: true },
+            { kind: 'subtitles', label: 'Spanish', src: 'https://raw.githubusercontent.com/andreyvit/subtitle-tools/master/sample.vtt', srcLang: 'es' }
+        ]
     },
     {
-        name: "Vertical Video (HLS)",
+        name: "Big Buck Bunny (HLS Quality)",
+        src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+        desc: "Standard HLS stream for testing adaptive bitrate switching and quality selection.",
+        tags: ["HLS", "ABR"]
+    },
+    {
+        name: "Vertical Video (Mobile)",
         src: "https://stream.mux.com/6fi010267Q400m00D6005008500b300N332s00F00/master.m3u8",
-        desc: "Vertical video test case.",
+        desc: "9:16 aspect ratio video to test layout responsiveness.",
         tags: ["HLS", "9:16"]
     }
 ];
@@ -59,6 +73,8 @@ const App = () => {
                         <StrataPlayer
                             key={currentSource.src} // Force remount on source change
                             src={currentSource.src}
+                            thumbnails={currentSource.thumbnails}
+                            textTracks={currentSource.tracks}
                             autoPlay={false}
                         />
                     </div>
