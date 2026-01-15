@@ -34,7 +34,7 @@ export interface PlayerState {
   notifications: Notification[];
 }
 
-const STORAGE_KEY = 'strata-settings-v1';
+const STORAGE_KEY = 'strata-settings-v2';
 
 const getSavedSettings = () => {
   try {
@@ -54,7 +54,7 @@ export const INITIAL_STATE: PlayerState = {
   buffered: [],
   volume: saved.volume ?? 1,
   isMuted: saved.isMuted ?? false,
-  audioGain: saved.audioGain ?? 1,
+  audioGain: 1, // Default to Off (1x)
   playbackRate: saved.playbackRate ?? 1,
   qualityLevels: [],
   currentQuality: -1,
@@ -119,7 +119,7 @@ export class StrataCore {
         volume: state.volume,
         isMuted: state.isMuted,
         playbackRate: state.playbackRate,
-        audioGain: state.audioGain
+        // Don't save audioGain, keep it ephemeral or intentional per session
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     });
@@ -135,29 +135,28 @@ export class StrataCore {
     this.video.addEventListener('playing', () => s({ isBuffering: false }));
     this.video.addEventListener('loadeddata', () => {
       s({ isBuffering: false });
+      // Success load resets retry count
       this.retryCount = 0;
       this.removeNotification('retry');
+      // Clear error if we recovered
+      if (this.store.get().error) {
+        s({ error: null });
+      }
     });
     this.video.addEventListener('canplay', () => s({ isBuffering: false }));
 
-    // Fix bounce back: Don't update time from video if we are actively seeking
     this.video.addEventListener('timeupdate', () => {
       if (!this.video.seeking) {
         s({ currentTime: this.video.currentTime });
       }
     });
 
-    // Ensure state syncs when seek completes
     this.video.addEventListener('seeked', () => s({ currentTime: this.video.currentTime }));
-
     this.video.addEventListener('durationchange', () => s({ duration: this.video.duration }));
     this.video.addEventListener('volumechange', () => s({ volume: this.video.volume, isMuted: this.video.muted }));
     this.video.addEventListener('ratechange', () => s({ playbackRate: this.video.playbackRate }));
-
     this.video.addEventListener('error', () => this.handleError());
-
     this.video.addEventListener('progress', this.updateBuffer.bind(this));
-
     this.video.addEventListener('enterpictureinpicture', () => s({ isPip: true }));
     this.video.addEventListener('leavepictureinpicture', () => s({ isPip: false }));
 
@@ -165,7 +164,6 @@ export class StrataCore {
     this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
   }
 
-  // Exposed for Plugins to trigger errors (e.g., HLS fatal errors)
   public triggerError(message: string, isFatal: boolean = false) {
     if (isFatal) {
       this.handleError(message);
@@ -178,12 +176,10 @@ export class StrataCore {
     const error = this.video.error;
     const message = customMessage || error?.message || (error ? `Code ${error.code}` : 'Unknown Error');
 
-    // Clear existing retry notification to update with new count
     this.removeNotification('retry');
 
     if (this.retryCount < this.maxRetries) {
       this.retryCount++;
-      // Exponential backoff
       const delay = Math.pow(2, this.retryCount - 1) * 1500;
 
       this.notify({
@@ -196,10 +192,8 @@ export class StrataCore {
 
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = setTimeout(() => {
-        // Reload source
         const time = this.video.currentTime;
-        this.load(this.currentSrc, this.currentTracks);
-        // Attempt to restore time if we had some
+        this.load(this.currentSrc, this.currentTracks, true); // True = isRetry
         if (time > 0) {
           const onCanPlay = () => {
             this.video.currentTime = time;
@@ -209,9 +203,13 @@ export class StrataCore {
         }
       }, delay);
     } else {
+      // Final failure
+      this.removeNotification('retry'); // Remove the spinner notification
       const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
       this.store.setState({ error: finalMsg });
-      this.notify({ type: 'error', message: finalMsg });
+      // We don't need a toast notification for error if we show the overlay, 
+      // but good to have a backup if overlay isn't covering everything.
+      // However, user requested "error component" handling.
     }
   }
 
@@ -227,7 +225,6 @@ export class StrataCore {
   }
 
   private updateSubtitles() {
-    // Small timeout to allow tracks to fully register
     setTimeout(() => {
       const tracks = Array.from(this.video.textTracks)
         .filter(t => t.kind === 'subtitles' || t.kind === 'captions')
@@ -240,35 +237,23 @@ export class StrataCore {
     }, 50);
   }
 
-  // --- Notification System ---
+  // --- Utility ---
 
-  notify(n: Omit<Notification, 'id'> & { id?: string }) {
-    const id = n.id || Math.random().toString(36).substr(2, 9);
-    const newNotification: Notification = { ...n, id };
-
-    const current = this.store.get().notifications;
-    const index = current.findIndex(x => x.id === id);
-    let updated = [];
-    if (index >= 0) {
-      updated = [...current];
-      updated[index] = newNotification;
-    } else {
-      updated = [...current, newNotification];
+  /**
+   * Fetch with 3 retries for general assets (thumbnails, tracks)
+   */
+  async fetchWithRetry(url: string, retries = 3): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res;
+      } catch (e) {
+        if (i === retries - 1) throw e;
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+      }
     }
-
-    this.store.setState({ notifications: updated });
-
-    if (n.duration) {
-      setTimeout(() => {
-        this.removeNotification(id);
-      }, n.duration);
-    }
-    return id;
-  }
-
-  removeNotification(id: string) {
-    const current = this.store.get().notifications;
-    this.store.setState({ notifications: current.filter(n => n.id !== id) });
+    throw new Error('Fetch failed');
   }
 
   // --- Core Methods ---
@@ -290,23 +275,20 @@ export class StrataCore {
     this.plugins.set(plugin.name, plugin);
   }
 
-  load(url: string, tracks: TextTrackConfig[] = []) {
+  load(url: string, tracks: TextTrackConfig[] = [], isRetry = false) {
     if (this.retryTimer) clearTimeout(this.retryTimer);
+
+    // Only reset retry count if it's a fresh load from user, not internal retry
+    if (!isRetry) {
+      this.retryCount = 0;
+      this.store.setState({ error: null });
+      this.removeNotification('retry');
+    }
+
     this.currentSrc = url;
     this.currentTracks = tracks;
-    // Don't reset retryCount here if we are reloading due to retry
-    // But since this is public load(), usually it's a new video. 
-    // We can infer if it's a retry if called internally, but for simplicity:
-    // We assume external calls reset, internal retry handling manages the counter.
-    // However, since we call load() in retry, we should conditionally reset.
-    // Actually, retry logic calls load, which resets count to 0 in previous code.
-    // FIX: Only reset retryCount if it's a "fresh" load. 
-    // For now, we'll reset it, but the retry logic manages the loop by setting timer *before* load? 
-    // No, if load() resets count, infinite loop happens. 
-    // We will REMOVE retryCount = 0 from load() and move it to explicit user action or success.
 
     this.store.setState({
-      error: null,
       isBuffering: true,
       qualityLevels: [],
       audioTracks: [],
@@ -315,28 +297,51 @@ export class StrataCore {
 
     this.events.emit('load', url);
 
-    // Remove old tracks
     const oldTracks = this.video.getElementsByTagName('track');
     while (oldTracks.length > 0) {
       oldTracks[0].remove();
     }
 
-    // Add new tracks
     if (tracks.length > 0) {
       tracks.forEach(t => {
-        const track = document.createElement('track');
-        track.kind = t.kind;
-        track.label = t.label;
-        track.src = t.src;
-        track.srclang = t.srcLang;
-        if (t.default) track.default = true;
-        this.video.appendChild(track);
+        // Check availability with retry before adding? 
+        // Browsers retry tracks automatically somewhat, but to be "verbose":
+        this.fetchWithRetry(t.src).then(() => {
+          this.addTextTrackInternal(t.src, t.label, t.srcLang, t.default);
+        }).catch(e => {
+          this.notify({ type: 'warning', message: `Failed to load subtitle: ${t.label}`, duration: 4000 });
+        });
       });
     }
 
     if (!url.includes('.m3u8')) {
       this.video.src = url;
     }
+  }
+
+  public addTextTrack(file: File, label: string) {
+    const url = URL.createObjectURL(file);
+    this.addTextTrackInternal(url, label, 'user', true);
+
+    setTimeout(() => {
+      const tracks = this.store.get().subtitleTracks;
+      const newTrackIndex = tracks.findIndex(t => t.label === label);
+      if (newTrackIndex !== -1) {
+        this.setSubtitle(newTrackIndex);
+        this.notify({ type: 'success', message: 'Subtitle uploaded', duration: 3000 });
+      }
+    }, 200);
+  }
+
+  private addTextTrackInternal(src: string, label: string, lang: string = '', isDefault: boolean = false) {
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = label;
+    track.src = src;
+    track.srclang = lang;
+    if (isDefault) track.default = true;
+    this.video.appendChild(track);
+    this.updateSubtitles();
   }
 
   play() { return this.video.play(); }
@@ -346,7 +351,6 @@ export class StrataCore {
   seek(time: number) {
     if (isNaN(time)) return;
     const t = Math.max(0, Math.min(time, this.video.duration));
-    // Optimistic UI update to prevent bounce back
     this.store.setState({ currentTime: t });
     this.video.currentTime = t;
   }
@@ -383,7 +387,6 @@ export class StrataCore {
 
   toggleFullscreen() {
     if (!this.container) return;
-
     if (!document.fullscreenElement) {
       this.container.requestFullscreen().catch(err => console.error(err));
       this.store.setState({ isFullscreen: true });
@@ -404,7 +407,6 @@ export class StrataCore {
   setSubtitle(index: number) {
     this.store.setState({ currentSubtitle: index });
     Array.from(this.video.textTracks).forEach((track, i) => {
-      // HLS.js tracks vs Native tracks handling can vary, simply toggle mode
       if (track.kind === 'subtitles' || track.kind === 'captions') {
         track.mode = i === index ? 'showing' : 'hidden';
       }
@@ -413,94 +415,73 @@ export class StrataCore {
 
   async download() {
     if (!this.video.src) return;
-
     const src = this.video.src;
-
-    // HLS Stream protection check
     if (src.includes('blob:') || src.includes('.m3u8')) {
-      this.notify({
-        type: 'warning',
-        message: 'HLS streams cannot be downloaded directly via browser.',
-        duration: 4000
-      });
+      this.notify({ type: 'warning', message: 'Stream download not supported in browser.', duration: 4000 });
       return;
     }
-
-    const notifId = this.notify({
-      type: 'loading',
-      message: 'Initializing download...',
-      progress: 0
-    });
-
+    const notifId = this.notify({ type: 'loading', message: 'Preparing download...', progress: 0 });
     try {
-      const response = await fetch(src);
-      if (!response.body) throw new Error('ReadableStream not supported.');
-      if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
-
+      const response = await this.fetchWithRetry(src); // Use retry for download
+      // ... (same stream reader logic as before)
+      if (!response.body) throw new Error('No body');
+      const reader = response.body.getReader();
       const contentLength = response.headers.get('Content-Length');
       const total = contentLength ? parseInt(contentLength, 10) : 0;
       let loaded = 0;
-
-      const reader = response.body.getReader();
       const chunks = [];
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         chunks.push(value);
         loaded += value.length;
-
         if (total) {
           const percent = Math.round((loaded / total) * 100);
-          this.notify({
-            id: notifId,
-            type: 'loading',
-            message: `Downloading... ${percent}%`,
-            progress: percent
-          });
+          this.notify({ id: notifId, type: 'loading', message: `Downloading... ${percent}%`, progress: percent });
         }
       }
-
       const blob = new Blob(chunks);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      const filename = src.split('/').pop()?.split('?')[0] || `video-${Date.now()}.mp4`;
-      a.download = filename;
+      a.download = src.split('/').pop()?.split('?')[0] || 'video.mp4';
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-
-      this.notify({
-        id: notifId,
-        type: 'success',
-        message: 'Download complete!',
-        duration: 3000
-      });
+      this.notify({ id: notifId, type: 'success', message: 'Saved!', duration: 3000 });
     } catch (e: any) {
-      console.error("Download failed", e);
-      const msg = e.message || 'Unknown error';
-      this.notify({
-        id: notifId,
-        type: 'error',
-        message: `Download failed: ${msg}. Falling back to tab open.`,
-        duration: 6000
-      });
+      this.notify({ id: notifId, type: 'error', message: 'Download failed.', duration: 4000 });
       window.open(src, '_blank');
     }
+  }
+
+  // Notification System
+  notify(n: Omit<Notification, 'id'> & { id?: string }) {
+    const id = n.id || Math.random().toString(36).substr(2, 9);
+    const newNotification: Notification = { ...n, id };
+    const current = this.store.get().notifications;
+    const index = current.findIndex(x => x.id === id);
+    let updated = index >= 0 ? [...current] : [...current, newNotification];
+    if (index >= 0) updated[index] = newNotification;
+
+    this.store.setState({ notifications: updated });
+    if (n.duration) setTimeout(() => this.removeNotification(id), n.duration);
+    return id;
+  }
+
+  removeNotification(id: string) {
+    const current = this.store.get().notifications;
+    this.store.setState({ notifications: current.filter(n => n.id !== id) });
   }
 
   destroy() {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.video.pause();
     this.video.src = '';
-    // Clear tracks
     const oldTracks = this.video.getElementsByTagName('track');
     while (oldTracks.length > 0) oldTracks[0].remove();
-
     this.events.destroy();
     this.store.destroy();
     this.plugins.forEach(p => p.destroy && p.destroy());
