@@ -1,11 +1,11 @@
 
-import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useLayoutEffect } from 'react';
 import { StrataCore, PlayerState, INITIAL_STATE, TextTrackConfig } from '../core/StrataCore';
 import { HlsPlugin } from '../plugins/HlsPlugin';
 import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, CheckIcon, PipIcon,
-    SubtitleIcon, DownloadIcon, ReplayIcon, ForwardIcon, ArrowLeftIcon,
+    SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon, ArrowLeftIcon,
     UploadIcon, LoaderIcon
 } from './Icons';
 
@@ -98,7 +98,6 @@ const parseVTT = async (url: string, notify: (msg: any) => void): Promise<Thumbn
                     }
                 }
 
-                // Only add if valid dimensions found (simple validation)
                 if (w > 0 && h > 0) {
                     cues.push({ start, end, url: urlPart, x, y, w, h });
                 }
@@ -143,19 +142,26 @@ const NotificationContainer = ({ notifications }: { notifications: PlayerState['
     );
 };
 
-// Generic Menu Container - Anchored Right to prevent overflow
-const Menu = ({ children, onClose }: { children?: React.ReactNode; onClose: () => void }) => {
+// Improved Menu with Positioning Props
+const Menu = ({ children, onClose, align = 'right' }: { children?: React.ReactNode; onClose: () => void; align?: 'right' | 'center' }) => {
     const ref = useRef<HTMLDivElement>(null);
     const [height, setHeight] = useState<number | undefined>(undefined);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (ref.current) {
             setHeight(ref.current.scrollHeight);
         }
-    });
+    }, [children]);
+
+    const positionClasses = align === 'center'
+        ? 'left-1/2 -translate-x-1/2 origin-bottom'
+        : 'right-0 origin-bottom-right';
 
     return (
-        <div className="absolute bottom-full mb-3 right-0 origin-bottom-right bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans">
+        <div
+            className={`absolute bottom-full mb-3 ${positionClasses} bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans`}
+            onClick={(e) => e.stopPropagation()}
+        >
             <div
                 className="transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 style={{ height: height ? `${height}px` : 'auto' }}
@@ -172,7 +178,10 @@ const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
-        <div className="absolute bottom-full mb-3 right-0 origin-bottom-right bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans">
+        <div
+            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 origin-bottom bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans"
+            onClick={(e) => e.stopPropagation()}
+        >
             <div className="px-4 py-3 border-b border-white/10 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5">
                 <span>Subtitles</span>
                 <button onClick={() => fileInputRef.current?.click()} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition-colors font-medium">
@@ -474,16 +483,12 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
         setTimeout(() => setSkipTrigger(null), 300);
     };
 
+    // Close menus on outside click
     const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!player) return;
+        if (settingsOpen) setSettingsOpen(false);
+        if (subtitleMenuOpen) setSubtitleMenuOpen(false);
 
-        // Click Outside Handling
-        if (settingsOpen || subtitleMenuOpen) {
-            setSettingsOpen(false);
-            setSubtitleMenuOpen(false);
-            e.stopPropagation();
-            return;
-        }
+        if (!player) return;
 
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -549,7 +554,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                             onAnimationEnd={() => setSeekAnimation(null)}
                         >
                             <div className="flex flex-col items-center text-white drop-shadow-lg">
-                                {seekAnimation.type === 'rewind' ? <ReplayIcon className="w-10 h-10 animate-pulse" /> : <ForwardIcon className="w-10 h-10 animate-pulse" />}
+                                {seekAnimation.type === 'rewind' ? <Replay10Icon className="w-12 h-12 animate-pulse" /> : <Forward10Icon className="w-12 h-12 animate-pulse" />}
                                 <span className="font-bold text-sm mt-2 font-mono">{seekAnimation.type === 'rewind' ? '-10s' : '+10s'}</span>
                             </div>
                         </div>
@@ -584,15 +589,25 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                         <div className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}>
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); triggerSkip('rewind'); }}
-                                    className={`group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-95 text-white/90 focus:outline-none backdrop-blur-sm ${skipTrigger === 'rewind' ? 'opacity-0 scale-75' : 'opacity-100 scale-100'}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSettingsOpen(false);
+                                        setSubtitleMenuOpen(false);
+                                        triggerSkip('rewind');
+                                    }}
+                                    className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"
                                 >
-                                    <ReplayIcon className="w-5 h-5" />
+                                    <Replay10Icon className="w-6 h-6" />
                                 </button>
 
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); player.togglePlay(); }}
-                                    className="group relative flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 hover:bg-indigo-600 border border-white/10 shadow-2xl transition-all hover:scale-110 active:scale-95 duration-75 focus:outline-none backdrop-blur-md"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSettingsOpen(false);
+                                        setSubtitleMenuOpen(false);
+                                        player.togglePlay();
+                                    }}
+                                    className="group relative flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 hover:bg-indigo-600 border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md"
                                 >
                                     {state.isPlaying ?
                                         <PauseIcon className="w-8 h-8 md:w-9 md:h-9 text-white fill-current" /> :
@@ -601,10 +616,15 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 </button>
 
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); triggerSkip('forward'); }}
-                                    className={`group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-95 text-white/90 focus:outline-none backdrop-blur-sm ${skipTrigger === 'forward' ? 'opacity-0 scale-75' : 'opacity-100 scale-100'}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSettingsOpen(false);
+                                        setSubtitleMenuOpen(false);
+                                        triggerSkip('forward');
+                                    }}
+                                    className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"
                                 >
-                                    <ForwardIcon className="w-5 h-5" />
+                                    <Forward10Icon className="w-6 h-6" />
                                 </button>
                             </div>
                         </div>
@@ -613,7 +633,14 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                     {/* Bottom Bar */}
                     <div
                         className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            // Clicking on the control bar background closes menus too
+                            if (e.target === e.currentTarget) {
+                                setSettingsOpen(false);
+                                setSubtitleMenuOpen(false);
+                            }
+                            e.stopPropagation();
+                        }}
                     >
                         {/* Scrubber */}
                         <div
@@ -628,24 +655,32 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                             {hoverTime !== null && (
                                 <div
                                     className="absolute bottom-full mb-4 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150"
-                                    style={{ left: `${hoverPos}%` }}
+                                    style={{
+                                        left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))`
+                                    }}
                                 >
                                     {currentThumbnail && (
-                                        <div className="mb-2 p-0.5 bg-black/80 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-sm">
+                                        <div
+                                            className="bg-black/90 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-sm"
+                                            style={{
+                                                width: `${currentThumbnail.w * 0.5}px`,
+                                                height: `${currentThumbnail.h * 0.5}px`
+                                            }}
+                                        >
                                             <div
-                                                className="bg-zinc-800"
                                                 style={{
+                                                    backgroundImage: `url("${currentThumbnail.url}")`,
                                                     width: `${currentThumbnail.w}px`,
                                                     height: `${currentThumbnail.h}px`,
-                                                    backgroundImage: `url(${currentThumbnail.url})`,
-                                                    // CSS crop logic for sprites
                                                     backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`,
-                                                    backgroundRepeat: 'no-repeat'
+                                                    backgroundRepeat: 'no-repeat',
+                                                    transform: 'scale(0.5)',
+                                                    transformOrigin: 'top left'
                                                 }}
                                             />
                                         </div>
                                     )}
-                                    <div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums">
+                                    <div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums mt-2">
                                         {formatTime(hoverTime)}
                                     </div>
                                 </div>
@@ -748,7 +783,11 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 {/* Subtitle Popover */}
                                 <div className="relative">
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSubtitleMenuOpen(!subtitleMenuOpen);
+                                            setSettingsOpen(false);
+                                        }}
                                         className={`p-2 rounded-lg transition-colors focus:outline-none ${subtitleMenuOpen ? 'text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}
                                     >
                                         <SubtitleIcon className="w-5 h-5" />
@@ -781,14 +820,19 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 {/* Settings Popover */}
                                 <div className="relative">
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSettingsOpen(!settingsOpen);
+                                            setSubtitleMenuOpen(false);
+                                            setActiveMenu('main');
+                                        }}
                                         className={`p-2 rounded-lg transition-all duration-300 focus:outline-none ${settingsOpen ? 'rotate-90 text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}
                                     >
                                         <SettingsIcon className="w-5 h-5" />
                                     </button>
 
                                     {settingsOpen && (
-                                        <Menu onClose={() => setSettingsOpen(false)}>
+                                        <Menu onClose={() => setSettingsOpen(false)} align="right">
                                             <div className="w-full">
                                                 {activeMenu === 'main' && (
                                                     <div className="animate-in slide-in-from-left-4 fade-in duration-200">

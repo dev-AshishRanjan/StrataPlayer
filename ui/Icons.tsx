@@ -1,6 +1,5 @@
 
 // Re-export icons from lucide-react for consistency
-// This assumes lucide-react is available in the import map as configured in index.html
 import {
   Play,
   Pause,
@@ -14,11 +13,11 @@ import {
   PictureInPicture,
   Subtitles,
   Download,
-  RotateCcw,
-  RotateCw,
   ArrowLeft,
   Upload,
-  Loader2
+  Loader2,
+  RotateCcw,
+  RotateCw
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -34,7 +33,20 @@ export const PipIcon = PictureInPicture;
 export const SubtitleIcon = Subtitles;
 export const DownloadIcon = Download;
 export const UploadIcon = Upload;
-export const ReplayIcon = RotateCcw; // 10s replay usually implies CCW
-export const ForwardIcon = RotateCw;
 export const ArrowLeftIcon = ArrowLeft;
 export const LoaderIcon = Loader2;
+
+// Custom 10s Skip Icons using Lucide base
+export const Replay10Icon = ({ className }: { className?: string }) => (
+  <div className={`relative flex items-center justify-center ${className}`}>
+    <RotateCcw className="w-full h-full" strokeWidth={2} />
+    <span className="absolute text-[35%] font-bold pt-[10%] select-none">10</span>
+  </div>
+);
+
+export const Forward10Icon = ({ className }: { className?: string }) => (
+  <div className={`relative flex items-center justify-center ${className}`}>
+    <RotateCw className="w-full h-full" strokeWidth={2} />
+    <span className="absolute text-[35%] font-bold pt-[10%] select-none">10</span>
+  </div>
+);
