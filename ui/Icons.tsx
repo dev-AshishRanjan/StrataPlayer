@@ -23,7 +23,15 @@ import {
   Clock,
   Minus,
   Plus,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Type,
+  Palette,
+  Eye,
+  MoveVertical,
+  RefreshCcw,
+  Bold,
+  CaseUpper,
+  Droplet
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -47,6 +55,14 @@ export const ClockIcon = Clock;
 export const MinusIcon = Minus;
 export const PlusIcon = Plus;
 export const CustomizeIcon = SlidersHorizontal;
+export const TypeIcon = Type;
+export const PaletteIcon = Palette;
+export const EyeIcon = Eye;
+export const MoveVerticalIcon = MoveVertical;
+export const ResetIcon = RefreshCcw;
+export const BoldIcon = Bold;
+export const CaseUpperIcon = CaseUpper;
+export const BlurIcon = Droplet;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (

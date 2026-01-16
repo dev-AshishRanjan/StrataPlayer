@@ -11,6 +11,32 @@ export interface Notification {
   progress?: number; // 0-100
 }
 
+export interface SubtitleSettings {
+  useNative: boolean; // "Native video subtitle"
+  fixCapitalization: boolean;
+  backgroundOpacity: number; // 0-100
+  backgroundBlur: boolean;
+  backgroundBlurAmount: number; // px
+  textSize: number; // % (100 = 1em)
+  textStyle: 'none' | 'outline' | 'raised' | 'depressed' | 'shadow';
+  isBold: boolean;
+  textColor: string;
+  verticalOffset: number; // px from bottom
+}
+
+export const DEFAULT_SUBTITLE_SETTINGS: SubtitleSettings = {
+  useNative: false,
+  fixCapitalization: false,
+  backgroundOpacity: 50,
+  backgroundBlur: false,
+  backgroundBlurAmount: 4,
+  textSize: 100,
+  textStyle: 'shadow',
+  isBold: false,
+  textColor: '#ffffff',
+  verticalOffset: 40,
+};
+
 export interface PlayerState {
   isPlaying: boolean;
   isBuffering: boolean;
@@ -31,11 +57,13 @@ export interface PlayerState {
   subtitleTracks: { label: string; language: string; index: number }[];
   currentSubtitle: number;
   subtitleOffset: number; // in seconds
+  subtitleSettings: SubtitleSettings;
+  activeCues: string[]; // For custom rendering
   viewMode: 'normal' | 'theater' | 'pip';
   notifications: Notification[];
 }
 
-const STORAGE_KEY = 'strata-settings-v2';
+const STORAGE_KEY = 'strata-settings-v3';
 
 const getSavedSettings = () => {
   try {
@@ -67,6 +95,8 @@ export const INITIAL_STATE: PlayerState = {
   subtitleTracks: [],
   currentSubtitle: -1,
   subtitleOffset: 0,
+  subtitleSettings: { ...DEFAULT_SUBTITLE_SETTINGS, ...(saved.subtitleSettings || {}) },
+  activeCues: [],
   viewMode: 'normal',
   notifications: []
 };
@@ -103,12 +133,21 @@ export class StrataCore {
   // Cast
   private castInitialized = false;
 
+  private boundCueChange: () => void;
+  private boundFullscreenChange: () => void;
+
   constructor(videoElement?: HTMLVideoElement) {
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
     this.events = new EventBus();
     this.store = new NanoStore(INITIAL_STATE);
     this.audioEngine = new AudioEngine(this.video);
+    this.boundCueChange = this.handleCueChange.bind(this);
+
+    // Bind fullscreen listener once
+    this.boundFullscreenChange = () => {
+      this.store.setState({ isFullscreen: !!document.fullscreenElement });
+    };
 
     this.video.volume = INITIAL_STATE.volume;
     this.video.muted = INITIAL_STATE.isMuted;
@@ -125,7 +164,7 @@ export class StrataCore {
         volume: state.volume,
         isMuted: state.isMuted,
         playbackRate: state.playbackRate,
-        // Don't save audioGain, keep it ephemeral or intentional per session
+        subtitleSettings: state.subtitleSettings,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     });
@@ -165,6 +204,9 @@ export class StrataCore {
     this.video.addEventListener('progress', this.updateBuffer.bind(this));
     this.video.addEventListener('enterpictureinpicture', () => s({ isPip: true }));
     this.video.addEventListener('leavepictureinpicture', () => s({ isPip: false }));
+
+    // Global fullscreen listener to catch Esc key or browser button
+    document.addEventListener('fullscreenchange', this.boundFullscreenChange);
 
     this.video.textTracks.addEventListener('addtrack', this.updateSubtitles.bind(this));
     this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
@@ -213,9 +255,6 @@ export class StrataCore {
       this.removeNotification('retry'); // Remove the spinner notification
       const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
       this.store.setState({ error: finalMsg });
-      // We don't need a toast notification for error if we show the overlay, 
-      // but good to have a backup if overlay isn't covering everything.
-      // However, user requested "error component" handling.
     }
   }
 
@@ -245,9 +284,6 @@ export class StrataCore {
 
   // --- Utility ---
 
-  /**
-   * Fetch with 3 retries for general assets (thumbnails, tracks)
-   */
   async fetchWithRetry(url: string, retries = 3): Promise<Response> {
     for (let i = 0; i < retries; i++) {
       try {
@@ -284,7 +320,6 @@ export class StrataCore {
   load(url: string, tracks: TextTrackConfig[] = [], isRetry = false) {
     if (this.retryTimer) clearTimeout(this.retryTimer);
 
-    // Only reset retry count if it's a fresh load from user, not internal retry
     if (!isRetry) {
       this.retryCount = 0;
       this.store.setState({ error: null });
@@ -310,8 +345,6 @@ export class StrataCore {
 
     if (tracks.length > 0) {
       tracks.forEach(t => {
-        // Check availability with retry before adding? 
-        // Browsers retry tracks automatically somewhat, but to be "verbose":
         this.fetchWithRetry(t.src).then(() => {
           this.addTextTrackInternal(t.src, t.label, t.srcLang, t.default);
         }).catch(e => {
@@ -330,17 +363,12 @@ export class StrataCore {
     reader.onload = (e) => {
       if (!e.target?.result) return;
       let content = e.target.result as string;
-
-      // Basic SRT to VTT conversion
       if (file.name.toLowerCase().endsWith('.srt') || !content.trim().startsWith('WEBVTT')) {
-        // Replace timestamp commas with dots: 00:00:00,000 -> 00:00:00.000
         content = content.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-        // Add header
         if (!content.trim().startsWith('WEBVTT')) {
           content = 'WEBVTT\n\n' + content;
         }
       }
-
       const blob = new Blob([content], { type: 'text/vtt' });
       const url = URL.createObjectURL(blob);
       this.addTextTrackInternal(url, label, 'user', true);
@@ -416,10 +444,10 @@ export class StrataCore {
     if (!this.container) return;
     if (!document.fullscreenElement) {
       this.container.requestFullscreen().catch(err => console.error(err));
-      this.store.setState({ isFullscreen: true });
+      // State update happens in the event listener
     } else {
       document.exitFullscreen();
-      this.store.setState({ isFullscreen: false });
+      // State update happens in the event listener
     }
   }
 
@@ -433,7 +461,6 @@ export class StrataCore {
 
   private initCast() {
     const w = window as any;
-
     const initializeCastApi = () => {
       if (this.castInitialized) return;
       try {
@@ -464,7 +491,6 @@ export class StrataCore {
     if (w.cast && w.cast.framework) {
       try {
         if (!this.castInitialized) this.initCast();
-
         w.cast.framework.CastContext.getInstance().requestSession()
           .then(() => {
             this.loadMediaToCast();
@@ -485,10 +511,8 @@ export class StrataCore {
     try {
       const castSession = w.cast.framework.CastContext.getInstance().getCurrentSession();
       if (!castSession) return;
-
       const mediaInfo = new w.chrome.cast.media.MediaInfo(this.currentSrc, this.currentSrc.includes('.m3u8') ? 'application/x-mpegurl' : 'video/mp4');
       const request = new w.chrome.cast.media.LoadRequest(mediaInfo);
-
       castSession.loadMedia(request).then(() => {
         this.notify({ type: 'success', message: 'Casting...', duration: 3000 });
       }).catch((e: any) => console.error('Cast load error', e));
@@ -497,13 +521,64 @@ export class StrataCore {
     }
   }
 
+  private handleCueChange() {
+    const state = this.store.get();
+    if (state.currentSubtitle === -1) {
+      this.store.setState({ activeCues: [] });
+      return;
+    }
+
+    // Find active track
+    const tracks = Array.from(this.video.textTracks).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
+    const track = tracks[state.currentSubtitle];
+
+    if (track && track.activeCues) {
+      const cues = Array.from(track.activeCues).map((c: any) => c.text);
+      this.store.setState({ activeCues: cues });
+    } else {
+      this.store.setState({ activeCues: [] });
+    }
+  }
+
   setSubtitle(index: number) {
-    this.store.setState({ currentSubtitle: index, subtitleOffset: 0 }); // Reset offset on change
-    Array.from(this.video.textTracks).forEach((track, i) => {
-      if (track.kind === 'subtitles' || track.kind === 'captions') {
-        track.mode = i === index ? 'showing' : 'hidden';
-      }
+    // Remove listeners from old tracks
+    Array.from(this.video.textTracks).forEach(t => {
+      t.removeEventListener('cuechange', this.boundCueChange);
+      t.mode = 'hidden'; // Reset to hidden before applying new state
     });
+
+    this.store.setState({ currentSubtitle: index, subtitleOffset: 0, activeCues: [] });
+
+    if (index !== -1) {
+      // Find active track in the filtered list logic
+      const tracks = Array.from(this.video.textTracks).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
+      const track = tracks[index];
+      if (track) {
+        const settings = this.store.get().subtitleSettings;
+        // If using Native, mode = showing. If custom, mode = hidden (but not disabled, so cues update)
+        track.mode = settings.useNative ? 'showing' : 'hidden';
+        track.addEventListener('cuechange', this.boundCueChange);
+
+        // Initial trigger
+        this.handleCueChange();
+      }
+    }
+  }
+
+  updateSubtitleSettings(settings: Partial<SubtitleSettings>) {
+    const current = this.store.get().subtitleSettings;
+    const newSettings = { ...current, ...settings };
+    this.store.setState({ subtitleSettings: newSettings });
+
+    // If switching native/custom, re-apply track mode
+    if (settings.useNative !== undefined) {
+      this.setSubtitle(this.store.get().currentSubtitle);
+    }
+  }
+
+  resetSubtitleSettings() {
+    this.store.setState({ subtitleSettings: DEFAULT_SUBTITLE_SETTINGS });
+    this.setSubtitle(this.store.get().currentSubtitle); // Re-apply modes
   }
 
   setSubtitleOffset(offset: number) {
@@ -512,9 +587,9 @@ export class StrataCore {
 
     if (Math.abs(delta) < 0.001) return;
 
-    // Apply delta to the currently active track cues
     Array.from(this.video.textTracks).forEach((track) => {
-      if (track.mode === 'showing' && track.cues) {
+      // If custom (hidden) or native (showing), we adjust cues
+      if ((track.mode === 'showing' || track.mode === 'hidden') && track.cues) {
         Array.from(track.cues).forEach((cue: any) => {
           cue.startTime += delta;
           cue.endTime += delta;
@@ -526,7 +601,7 @@ export class StrataCore {
     this.notify({ type: 'info', message: `Subtitle Offset: ${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`, duration: 1500 });
   }
 
-  async download() {
+  async download() { /* same as before */
     if (!this.video.src) return;
     const src = this.video.src;
     if (src.includes('blob:') || src.includes('.m3u8')) {
@@ -535,8 +610,7 @@ export class StrataCore {
     }
     const notifId = this.notify({ type: 'loading', message: 'Preparing download...', progress: 0 });
     try {
-      const response = await this.fetchWithRetry(src); // Use retry for download
-      // ... (same stream reader logic as before)
+      const response = await this.fetchWithRetry(src);
       if (!response.body) throw new Error('No body');
       const reader = response.body.getReader();
       const contentLength = response.headers.get('Content-Length');
@@ -570,14 +644,10 @@ export class StrataCore {
     }
   }
 
-  // Notification System
   notify(n: Omit<Notification, 'id'> & { id?: string }) {
     const id = n.id || Math.random().toString(36).substr(2, 9);
     const newNotification: Notification = { ...n, id };
-
-    // Enforce single notification policy: Replace existing
     this.store.setState({ notifications: [newNotification] });
-
     if (n.duration) setTimeout(() => this.removeNotification(id), n.duration);
     return id;
   }
@@ -589,6 +659,7 @@ export class StrataCore {
 
   destroy() {
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    document.removeEventListener('fullscreenchange', this.boundFullscreenChange);
     this.video.pause();
     this.video.src = '';
     const oldTracks = this.video.getElementsByTagName('track');

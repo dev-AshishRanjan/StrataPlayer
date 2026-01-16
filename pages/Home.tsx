@@ -9,6 +9,7 @@ interface VideoSource {
   desc: string;
   tags: string[];
   thumbnails?: string;
+  poster?: string;
   tracks?: TextTrackConfig[];
 }
 
@@ -27,10 +28,11 @@ const SOURCES: VideoSource[] = [
     tags: ["HLS", "Multi-Audio"]
   },
   {
-    name: "Sintel (External Subs)",
+    name: "Sintel (External Subs & Poster)",
     src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    desc: "MP4 file with verified external VTT subtitles.",
-    tags: ["MP4", "VTT Subs"],
+    poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg",
+    desc: "MP4 file with verified external VTT subtitles and a poster image.",
+    tags: ["MP4", "VTT Subs", "Poster"],
     tracks: [
       { kind: 'subtitles', label: 'English', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_en.vtt', srcLang: 'en', default: true },
       { kind: 'subtitles', label: 'Spanish', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_es.vtt', srcLang: 'es' },
@@ -57,6 +59,7 @@ export const Home = () => {
           <StrataPlayer
             key={currentSource.src} // Force remount on source change
             src={currentSource.src}
+            poster={currentSource.poster}
             thumbnails={currentSource.thumbnails}
             textTracks={currentSource.tracks}
             autoPlay={false}
