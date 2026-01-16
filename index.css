@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #09090b;
+    color: #ffffff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom Range Input Reset */
+  input[type=range] {
+    -webkit-appearance: none;
+    background: transparent;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Improved Cast Button */
+google-cast-launcher {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  color: #a1a1aa;
+  /* zinc-400 */
+  cursor: pointer;
+  --connected-color: #6366f1;
+  --disconnected-color: #a1a1aa;
+  transition: color 0.2s;
+}
+
+google-cast-launcher:hover {
+  --disconnected-color: #ffffff;
+}

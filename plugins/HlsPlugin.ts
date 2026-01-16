@@ -1,15 +1,10 @@
 
 import { StrataCore, IPlugin } from '../core/StrataCore';
-
-declare global {
-  interface Window {
-    Hls: any;
-  }
-}
+import Hls from 'hls.js';
 
 export class HlsPlugin implements IPlugin {
   name = 'HlsPlugin';
-  private hls: any = null;
+  private hls: Hls | null = null;
   private core: StrataCore | null = null;
 
   init(core: StrataCore) {
@@ -19,7 +14,7 @@ export class HlsPlugin implements IPlugin {
     this.core.events.on('load', (data: { url: string, type: string }) => {
       // Only proceed if type matches HLS
       if (data.type === 'hls' || data.url.includes('.m3u8')) {
-        if (window.Hls && window.Hls.isSupported()) {
+        if (Hls.isSupported()) {
           this.loadHls(data.url);
         } else if (this.core!.video.canPlayType('application/vnd.apple.mpegurl')) {
           // Native HLS fallback (Safari) - Core sets src, we do nothing
@@ -55,7 +50,7 @@ export class HlsPlugin implements IPlugin {
       this.hls.destroy();
     }
 
-    this.hls = new window.Hls({
+    this.hls = new Hls({
       autoStartLoad: true,
       startLevel: -1, // Auto
       capLevelToPlayerSize: true, // Performance opt
@@ -64,7 +59,7 @@ export class HlsPlugin implements IPlugin {
     this.hls.loadSource(url);
     this.hls.attachMedia(this.core!.video);
 
-    this.hls.on(window.Hls.Events.MANIFEST_PARSED, (event: any, data: any) => {
+    this.hls.on(Hls.Events.MANIFEST_PARSED, (event: any, data: any) => {
       const levels = data.levels.map((lvl: any, idx: number) => ({
         height: lvl.height,
         bitrate: lvl.bitrate,
@@ -74,7 +69,7 @@ export class HlsPlugin implements IPlugin {
     });
 
     // Handle Audio Tracks
-    this.hls.on(window.Hls.Events.AUDIO_TRACKS_UPDATED, (event: any, data: any) => {
+    this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event: any, data: any) => {
       const tracks = data.audioTracks.map((track: any, idx: number) => ({
         label: track.name || track.lang || `Audio ${idx + 1}`,
         language: track.lang || '',
@@ -82,16 +77,16 @@ export class HlsPlugin implements IPlugin {
       }));
       this.core!.store.setState({
         audioTracks: tracks,
-        currentAudioTrack: this.hls.audioTrack
+        currentAudioTrack: this.hls!.audioTrack
       });
     });
 
-    this.hls.on(window.Hls.Events.LEVEL_SWITCHED, (event: any, data: any) => {
+    this.hls.on(Hls.Events.LEVEL_SWITCHED, (event: any, data: any) => {
       // Update current quality only if in auto mode to show what's playing
       // If manual, state is already set
     });
 
-    this.hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
+    this.hls.on(Hls.Events.ERROR, (event: any, data: any) => {
       if (data.fatal) {
         // Pass fatal errors to Core to handle the retry loop visibly
         const msg = data.details || 'Unknown HLS Error';

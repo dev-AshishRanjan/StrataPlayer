@@ -1,14 +1,15 @@
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  // IMPORTANT: This ensures assets work on https://<user>.github.io/StrataPlayer/
-  base: '/StrataPlayer/',
+  // Set base path to /StrataPlayer/ for production (GitHub Pages), root for dev
+  base: mode === 'production' ? '/StrataPlayer/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
   }
-});
+}));
