@@ -68,13 +68,13 @@ export const BlurIcon = Droplet;
 export const Replay10Icon = ({ className }: { className?: string }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
     <RotateCcw className="w-full h-full" strokeWidth={2} />
-    <span className="absolute text-[35%] font-bold pt-[10%] select-none">10</span>
+    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">10</span>
   </div>
 );
 
 export const Forward10Icon = ({ className }: { className?: string }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
     <RotateCw className="w-full h-full" strokeWidth={2} />
-    <span className="absolute text-[35%] font-bold pt-[10%] select-none">10</span>
+    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">10</span>
   </div>
 );

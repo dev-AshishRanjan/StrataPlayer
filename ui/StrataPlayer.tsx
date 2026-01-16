@@ -43,6 +43,32 @@ const fetchVttWithRetry = async (url: string, retries = 3): Promise<string> => {
     throw new Error('Failed');
 }
 
+// Hook to manage CSS transitions for mounting/unmounting
+const useTransition = (isActive: boolean, duration: number = 200) => {
+    const [isMounted, setIsMounted] = useState(isActive);
+    const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => {
+        if (isActive) {
+            setIsMounted(true);
+            // Double RAF ensures the browser paints the initial state before applying the active state
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setIsVisible(true);
+                });
+            });
+        } else {
+            setIsVisible(false);
+            const timer = setTimeout(() => {
+                setIsMounted(false);
+            }, duration);
+            return () => clearTimeout(timer);
+        }
+    }, [isActive, duration]);
+
+    return { isMounted, isVisible };
+};
+
 interface ThumbnailCue {
     start: number;
     end: number;
@@ -180,7 +206,7 @@ const NotificationContainer = ({ notifications }: { notifications: PlayerState['
     );
 };
 
-const Menu = ({ children, onClose, align = 'right', maxHeight }: { children?: React.ReactNode; onClose: () => void; align?: 'right' | 'center'; maxHeight?: number }) => {
+const Menu = ({ children, onClose, align = 'right', maxHeight, className }: { children?: React.ReactNode; onClose: () => void; align?: 'right' | 'center'; maxHeight?: number; className?: string }) => {
     const ref = useRef<HTMLDivElement>(null);
 
     const positionClasses = align === 'center' ? 'left-1/2 -translate-x-1/2 origin-bottom' : 'right-0 origin-bottom-right';
@@ -189,7 +215,7 @@ const Menu = ({ children, onClose, align = 'right', maxHeight }: { children?: Re
 
     return (
         <div
-            className={`absolute bottom-full mb-4 ${positionClasses} bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[300px] max-w-[calc(100vw-32px)] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans flex flex-col p-1.5`}
+            className={`absolute bottom-full mb-4 ${positionClasses} bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[300px] max-w-[calc(100vw-32px)] text-sm z-50 ring-1 ring-white/5 font-sans flex flex-col p-1.5 transition-all duration-300 ease-out ${className}`}
             style={styleObj}
             onClick={(e) => e.stopPropagation()}
         >
@@ -290,12 +316,12 @@ const SettingsGroup = ({ title, children }: any) => (
 
 // --- Subtitle Menu ---
 
-const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, settings, onSettingsChange, onReset, offset, maxHeight }: any) => {
+const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, settings, onSettingsChange, onReset, offset, maxHeight, animationClass }: any) => {
     const [view, setView] = useState<'main' | 'customize'>('main');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
-        <Menu onClose={onClose} align="right" maxHeight={maxHeight}>
+        <Menu onClose={onClose} align="right" maxHeight={maxHeight} className={animationClass}>
             {view === 'main' && (
                 <div className="animate-in slide-in-from-left-4 fade-in duration-200">
                     <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg">
@@ -534,6 +560,10 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
     const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party'>('main');
+
+    // Transition States
+    const settingsTransition = useTransition(settingsOpen, 200);
+    const subtitleTransition = useTransition(subtitleMenuOpen, 200);
 
     // Seek & Scrubbing State
     const [isScrubbing, setIsScrubbing] = useState(false);
@@ -806,13 +836,13 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 <div className="p-2 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"><google-cast-launcher></google-cast-launcher></div>
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`p-2 rounded-lg transition-colors focus:outline-none ${subtitleMenuOpen ? 'text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SubtitleIcon className="w-5 h-5" /></button>
-                                    {subtitleMenuOpen && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} />)}
+                                    {subtitleTransition.isMounted && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'} />)}
                                 </div>
                                 <button onClick={() => player.togglePip()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors hidden sm:block focus:outline-none"><PipIcon className="w-5 h-5" /></button>
                                 <button onClick={() => player.download()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors hidden sm:block focus:outline-none"><DownloadIcon className="w-5 h-5" /></button>
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`p-2 rounded-lg transition-all duration-300 focus:outline-none ${settingsOpen ? 'rotate-90 text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SettingsIcon className="w-5 h-5" /></button>
-                                    {settingsOpen && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight}><div className="w-full">{activeMenu === 'main' && (<div className="animate-in slide-in-from-left-4 fade-in duration-200"><div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg"><span>Settings</span></div><MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu /><MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu /><MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu /><MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu /><MenuDivider /><MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu /><MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} /></div>)}{['speed', 'quality', 'audio', 'boost', 'party'].includes(activeMenu) && (<div className="animate-in slide-in-from-right-4 fade-in duration-200">{activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}{activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}{activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}{activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}{activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-xs">Create Room</a></div></>)}</div>)}</div></Menu>)}
+                                    {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}><div className="w-full">{activeMenu === 'main' && (<div className="animate-in slide-in-from-left-4 fade-in duration-200"><div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg"><span>Settings</span></div><MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu /><MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu /><MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu /><MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu /><MenuDivider /><MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu /><MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} /></div>)}{['speed', 'quality', 'audio', 'boost', 'party'].includes(activeMenu) && (<div className="animate-in slide-in-from-right-4 fade-in duration-200">{activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}{activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}{activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}{activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}{activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-xs">Create Room</a></div></>)}</div>)}</div></Menu>)}
                                 </div>
                                 <button onClick={() => player.toggleFullscreen()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-transform hover:scale-110 focus:outline-none">{state.isFullscreen ? <MinimizeIcon className="w-5 h-5" /> : <MaximizeIcon className="w-5 h-5" />}</button>
                             </div>
