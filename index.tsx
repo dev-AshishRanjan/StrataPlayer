@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Link, Route, Switch, useLocation, Router } from 'wouter';
@@ -9,7 +8,7 @@ import './index.css';
 
 // Calculate the base path for routing.
 // We safely access import.meta.env to prevent crashes.
-const envBase = import.meta.env?.BASE_URL;
+const envBase = (import.meta as any).env?.BASE_URL;
 const base = envBase ? envBase.replace(/\/$/, '') : '';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
