@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
           rollupTypes: true
         })
       ],
+      publicDir: false,
       build: {
         outDir: 'dist',
         lib: {
