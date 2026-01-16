@@ -79,6 +79,12 @@ export const Forward10Icon = ({ className }: { className?: string }) => (
   </div>
 );
 
-export const StrataLogo = ({ className }: { className?: string }) => (
-  <img src="/logo.png" alt="StrataPlayer Logo" className={className} />
-);
+export const StrataLogo = ({ className }: { className?: string }) => {
+  // Use Vite's BASE_URL env variable to construct the path relative to the deployment root.
+  // In dev, this is "/", so result is "/logo.png".
+  // In prod, this is "/StrataPlayer/", so result is "/StrataPlayer/logo.png".
+  const base = import.meta.env?.BASE_URL || '/';
+  const src = `${base}logo.png`;
+
+  return <img src={src} alt="StrataPlayer Logo" className={className} />;
+};
