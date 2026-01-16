@@ -17,7 +17,12 @@ import {
   Upload,
   Loader2,
   RotateCcw,
-  RotateCw
+  RotateCw,
+  Cast,
+  Users,
+  Clock,
+  Minus,
+  Plus
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -35,6 +40,11 @@ export const DownloadIcon = Download;
 export const UploadIcon = Upload;
 export const ArrowLeftIcon = ArrowLeft;
 export const LoaderIcon = Loader2;
+export const CastIcon = Cast;
+export const UsersIcon = Users;
+export const ClockIcon = Clock;
+export const MinusIcon = Minus;
+export const PlusIcon = Plus;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (

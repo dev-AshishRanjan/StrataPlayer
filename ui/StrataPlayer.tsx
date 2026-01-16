@@ -6,7 +6,7 @@ import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, CheckIcon, PipIcon,
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon, ArrowLeftIcon,
-    UploadIcon, LoaderIcon
+    UploadIcon, LoaderIcon, CastIcon, UsersIcon, ClockIcon, MinusIcon, PlusIcon
 } from './Icons';
 
 declare module 'react' {
@@ -219,9 +219,12 @@ const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => 
     );
 }
 
-const MenuItem = ({ label, value, active, onClick, hasSubmenu }: any) => (
+const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: any) => (
     <button onClick={onClick} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10 transition-colors text-left text-zinc-200 active:bg-white/5 focus:outline-none focus:bg-white/10 group overflow-hidden">
-        <span className={`flex-1 font-medium truncate pr-4 ${active ? 'text-indigo-400' : ''}`} title={label}>{label}</span>
+        <div className="flex items-center gap-3 overflow-hidden">
+            {icon && <span className="text-zinc-400 shrink-0">{icon}</span>}
+            <span className={`font-medium truncate ${active ? 'text-indigo-400' : ''}`} title={label}>{label}</span>
+        </div>
         <div className="flex items-center gap-2 text-zinc-400 shrink-0">
             {value && <span className="text-xs font-medium truncate max-w-[60px]" title={value}>{value}</span>}
             {active && <CheckIcon className="w-4 h-4 text-indigo-500 shrink-0" />}
@@ -239,6 +242,8 @@ const MenuHeader = ({ label, onBack }: { label: string, onBack: () => void }) =>
         <span>{label}</span>
     </button>
 );
+
+const MenuDivider = () => <div className="h-px bg-white/10 mx-4 my-1"></div>;
 
 // --- Main Player Component ---
 
@@ -264,7 +269,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost'>('main');
+    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'offset' | 'party'>('main');
 
     // Seek & Scrubbing State
     const [isScrubbing, setIsScrubbing] = useState(false);
@@ -855,12 +860,33 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                             onClick={() => setActiveMenu('boost')}
                                                             hasSubmenu
                                                         />
+                                                        <MenuDivider />
+                                                        <MenuItem
+                                                            label="Subtitle Offset"
+                                                            value={`${state.subtitleOffset > 0 ? '+' : ''}${state.subtitleOffset.toFixed(1)}s`}
+                                                            icon={<ClockIcon className="w-4 h-4" />}
+                                                            onClick={() => setActiveMenu('offset')}
+                                                            hasSubmenu
+                                                        />
+                                                        <MenuItem
+                                                            label="Watch Party"
+                                                            icon={<UsersIcon className="w-4 h-4" />}
+                                                            onClick={() => setActiveMenu('party')}
+                                                            hasSubmenu
+                                                        />
+                                                        <MenuItem
+                                                            label="Cast to Device"
+                                                            icon={<CastIcon className="w-4 h-4" />}
+                                                            onClick={() => {
+                                                                player.requestCast();
+                                                                setSettingsOpen(false);
+                                                            }}
+                                                        />
                                                     </div>
                                                 )}
                                                 {/* Submenus */}
-                                                {['speed', 'quality', 'audio', 'boost'].includes(activeMenu) && (
+                                                {['speed', 'quality', 'audio', 'boost', 'offset', 'party'].includes(activeMenu) && (
                                                     <div className="animate-in slide-in-from-right-4 fade-in duration-200">
-                                                        {/* Handled by conditional renders below to keep DOM clean */}
                                                         {activeMenu === 'speed' && (
                                                             <>
                                                                 <MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />
@@ -893,6 +919,54 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                                 {[1, 1.5, 2, 3].map(gain => (
                                                                     <MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />
                                                                 ))}
+                                                            </>
+                                                        )}
+                                                        {activeMenu === 'offset' && (
+                                                            <>
+                                                                <MenuHeader label="Subtitle Offset" onBack={() => setActiveMenu('main')} />
+                                                                <div className="px-4 py-4 flex flex-col items-center gap-3">
+                                                                    <div className="text-3xl font-mono font-bold tabular-nums text-zinc-100">
+                                                                        {state.subtitleOffset > 0 ? '+' : ''}{state.subtitleOffset.toFixed(1)}s
+                                                                    </div>
+                                                                    <div className="flex gap-3 w-full">
+                                                                        <button
+                                                                            onClick={() => player.setSubtitleOffset(Math.round((state.subtitleOffset - 0.1) * 10) / 10)}
+                                                                            className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center"
+                                                                        >
+                                                                            <MinusIcon className="w-5 h-5" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => player.setSubtitleOffset(Math.round((state.subtitleOffset + 0.1) * 10) / 10)}
+                                                                            className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center"
+                                                                        >
+                                                                            <PlusIcon className="w-5 h-5" />
+                                                                        </button>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => player.setSubtitleOffset(0)}
+                                                                        className="text-xs text-zinc-500 hover:text-white transition-colors mt-2"
+                                                                    >
+                                                                        Reset Offset
+                                                                    </button>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        {activeMenu === 'party' && (
+                                                            <>
+                                                                <MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} />
+                                                                <div className="p-4 space-y-3">
+                                                                    <p className="text-xs text-zinc-400 leading-relaxed">
+                                                                        Create a synchronized room on WatchParty.me to watch together.
+                                                                    </p>
+                                                                    <a
+                                                                        href={`https://www.watchparty.me/#${src}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="flex items-center justify-center w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-xs"
+                                                                    >
+                                                                        Create Room
+                                                                    </a>
+                                                                </div>
                                                             </>
                                                         )}
                                                     </div>

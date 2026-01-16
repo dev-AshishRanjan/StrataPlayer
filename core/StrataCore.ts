@@ -30,6 +30,7 @@ export interface PlayerState {
   isPip: boolean;
   subtitleTracks: { label: string; language: string; index: number }[];
   currentSubtitle: number;
+  subtitleOffset: number; // in seconds
   viewMode: 'normal' | 'theater' | 'pip';
   notifications: Notification[];
 }
@@ -65,6 +66,7 @@ export const INITIAL_STATE: PlayerState = {
   isPip: false,
   subtitleTracks: [],
   currentSubtitle: -1,
+  subtitleOffset: 0,
   viewMode: 'normal',
   notifications: []
 };
@@ -98,6 +100,9 @@ export class StrataCore {
   private currentSrc: string = '';
   private currentTracks: TextTrackConfig[] = [];
 
+  // Cast
+  private castInitialized = false;
+
   constructor(videoElement?: HTMLVideoElement) {
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
@@ -113,6 +118,7 @@ export class StrataCore {
     }
 
     this.initVideoListeners();
+    this.initCast();
 
     this.store.subscribe((state) => {
       const settings = {
@@ -425,13 +431,98 @@ export class StrataCore {
     }
   }
 
+  private initCast() {
+    const w = window as any;
+
+    const initializeCastApi = () => {
+      if (this.castInitialized) return;
+      try {
+        const CastContext = w.cast.framework.CastContext;
+        // Proper init is required before requestSession works
+        CastContext.getInstance().setOptions({
+          receiverApplicationId: w.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+          autoJoinPolicy: w.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+        });
+        this.castInitialized = true;
+      } catch (e) {
+        console.warn('Cast Init Error or already initialized', e);
+      }
+    };
+
+    if (w.cast && w.cast.framework) {
+      initializeCastApi();
+    } else {
+      w.__onGCastApiAvailable = (isAvailable: boolean) => {
+        if (isAvailable) initializeCastApi();
+      };
+    }
+  }
+
+  requestCast() {
+    const w = window as any;
+    if (w.cast && w.cast.framework) {
+      try {
+        if (!this.castInitialized) this.initCast();
+
+        w.cast.framework.CastContext.getInstance().requestSession()
+          .then(() => {
+            this.loadMediaToCast();
+          })
+          .catch((e: any) => {
+            if (e !== 'cancel') this.notify({ type: 'error', message: 'Cast failed: ' + e, duration: 3000 });
+          });
+      } catch (e) {
+        this.notify({ type: 'warning', message: 'Cast not available', duration: 3000 });
+      }
+    } else {
+      this.notify({ type: 'warning', message: 'Cast API not loaded', duration: 3000 });
+    }
+  }
+
+  private loadMediaToCast() {
+    const w = window as any;
+    try {
+      const castSession = w.cast.framework.CastContext.getInstance().getCurrentSession();
+      if (!castSession) return;
+
+      const mediaInfo = new w.chrome.cast.media.MediaInfo(this.currentSrc, this.currentSrc.includes('.m3u8') ? 'application/x-mpegurl' : 'video/mp4');
+      const request = new w.chrome.cast.media.LoadRequest(mediaInfo);
+
+      castSession.loadMedia(request).then(() => {
+        this.notify({ type: 'success', message: 'Casting...', duration: 3000 });
+      }).catch((e: any) => console.error('Cast load error', e));
+    } catch (e) {
+      console.error("Failed to load media into Cast session", e);
+    }
+  }
+
   setSubtitle(index: number) {
-    this.store.setState({ currentSubtitle: index });
+    this.store.setState({ currentSubtitle: index, subtitleOffset: 0 }); // Reset offset on change
     Array.from(this.video.textTracks).forEach((track, i) => {
       if (track.kind === 'subtitles' || track.kind === 'captions') {
         track.mode = i === index ? 'showing' : 'hidden';
       }
     });
+  }
+
+  setSubtitleOffset(offset: number) {
+    const currentOffset = this.store.get().subtitleOffset;
+    const delta = offset - currentOffset;
+
+    if (Math.abs(delta) < 0.001) return;
+
+    // Apply delta to the currently active track cues
+    Array.from(this.video.textTracks).forEach((track) => {
+      if (track.mode === 'showing' && track.cues) {
+        Array.from(track.cues).forEach((cue: any) => {
+          cue.startTime += delta;
+          cue.endTime += delta;
+        });
+      }
+    });
+
+    this.store.setState({ subtitleOffset: offset });
+    this.notify({ type: 'info', message: `Subtitle Offset: ${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`, duration: 1500 });
   }
 
   async download() {
@@ -482,12 +573,10 @@ export class StrataCore {
   notify(n: Omit<Notification, 'id'> & { id?: string }) {
     const id = n.id || Math.random().toString(36).substr(2, 9);
     const newNotification: Notification = { ...n, id };
-    const current = this.store.get().notifications;
-    const index = current.findIndex(x => x.id === id);
-    let updated = index >= 0 ? [...current] : [...current, newNotification];
-    if (index >= 0) updated[index] = newNotification;
 
-    this.store.setState({ notifications: updated });
+    // Enforce single notification policy: Replace existing
+    this.store.setState({ notifications: [newNotification] });
+
     if (n.duration) setTimeout(() => this.removeNotification(id), n.duration);
     return id;
   }
