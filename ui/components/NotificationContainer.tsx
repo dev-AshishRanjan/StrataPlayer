@@ -1,0 +1,31 @@
+
+import React from 'react';
+import { PlayerState } from '../../core/StrataCore';
+import { LoaderIcon } from '../Icons';
+
+export const NotificationContainer = ({ notifications }: { notifications: PlayerState['notifications'] }) => {
+  return (
+    <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 pointer-events-none font-sans">
+      {notifications.map((n) => (
+        <div
+          key={n.id}
+          className={`
+                        bg-zinc-950/80 backdrop-blur-md border border-white/10 text-white px-4 py-3 rounded-lg shadow-xl text-sm font-medium flex items-center gap-3 animate-in slide-in-from-left-2 fade-in duration-300 max-w-sm
+                        ${n.type === 'error' ? 'border-red-500/50 text-red-100' : ''}
+                        ${n.type === 'warning' ? 'border-amber-500/50 text-amber-100' : ''}
+                    `}
+        >
+          {n.type === 'loading' && <LoaderIcon className="w-4 h-4 animate-spin text-indigo-400" />}
+          <div className="flex flex-col gap-1 w-full">
+            <span>{n.message}</span>
+            {typeof n.progress === 'number' && (
+              <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${n.progress}%` }}></div>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
