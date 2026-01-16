@@ -28,11 +28,21 @@ export default defineConfig(({ mode }) => {
           fileName: (format) => `strataplayer.${format}.js`,
         },
         rollupOptions: {
-          external: ['react', 'react-dom'],
+          // Critical: Externalize react-dom/client and jsx-runtime to prevent bundling issues
+          external: [
+            'react',
+            'react-dom',
+            'react-dom/client',
+            'react/jsx-runtime',
+            'hls.js',
+            'lucide-react'
+          ],
           output: {
             globals: {
               react: 'React',
               'react-dom': 'ReactDOM',
+              'hls.js': 'Hls',
+              'lucide-react': 'Lucide'
             },
             assetFileNames: (assetInfo) => {
               if (assetInfo.name === 'style.css') return 'style.css';
