@@ -33,8 +33,8 @@ const App = () => {
                     </Link>
                     <div className="flex gap-6 text-sm font-medium text-zinc-400">
                         <NavLink href="/playground">Playground</NavLink>
-                        <a href="#" className="hover:text-white transition-colors">Documentation</a>
-                        <a href="#" className="hover:text-white transition-colors">GitHub</a>
+                        <a href="https://github.com/dev-AshishRanjan/StrataPlayer#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Documentation</a>
+                        <a href="https://github.com/dev-AshishRanjan/StrataPlayer" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
                     </div>
                 </div>
             </nav>
