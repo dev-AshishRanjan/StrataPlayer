@@ -1,15 +1,65 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import dts from 'vite-plugin-dts';
+import { resolve } from 'path';
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  plugins: [react()],
-  // Set base path to /StrataPlayer/ for production (GitHub Pages), root for dev
-  base: mode === 'production' ? '/StrataPlayer/' : '/',
-  build: {
-    outDir: 'dist',
-    assetsDir: 'assets',
-    sourcemap: false,
+export default defineConfig(({ mode }) => {
+  // 1. Library Build (NPM Package)
+  // Runs when `vite build --mode lib` is called
+  if (mode === 'lib') {
+    return {
+      plugins: [
+        react(),
+        dts({
+          insertTypesEntry: true,
+          include: ['lib.ts', 'core', 'plugins', 'ui', 'utils'],
+          rollupTypes: true
+        })
+      ],
+      build: {
+        outDir: 'dist',
+        lib: {
+          entry: resolve(__dirname, 'lib.ts'),
+          name: 'StrataPlayer',
+          fileName: (format) => `strataplayer.${format}.js`,
+        },
+        rollupOptions: {
+          external: ['react', 'react-dom'],
+          output: {
+            globals: {
+              react: 'React',
+              'react-dom': 'ReactDOM',
+            },
+            assetFileNames: (assetInfo) => {
+              if (assetInfo.name === 'style.css') return 'style.css';
+              return assetInfo.name as string;
+            },
+          },
+        },
+        sourcemap: true,
+        emptyOutDir: true,
+      },
+    };
   }
-}));
+
+  // 2. Demo Site Build (GitHub Pages)
+  // Runs when `vite build --mode demo` is called
+  if (mode === 'demo') {
+    return {
+      plugins: [react()],
+      base: '/StrataPlayer/', // Critical for GitHub Pages repo subdirectory
+      build: {
+        outDir: 'dist-site',
+        emptyOutDir: true,
+      }
+    };
+  }
+
+  // 3. Local Development
+  // Runs when `vite` or `vite dev` is called
+  return {
+    plugins: [react()],
+    base: '/',
+  };
+});

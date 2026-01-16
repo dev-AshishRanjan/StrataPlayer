@@ -15,8 +15,11 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "types": ["vite/client", "node"]
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts", "**/*.tsx", "vite-env.d.ts"],
+  "exclude": ["node_modules", "dist", "dist-site"]
 }
