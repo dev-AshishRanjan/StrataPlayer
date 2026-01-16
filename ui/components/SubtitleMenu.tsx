@@ -9,7 +9,7 @@ import {
   PaletteIcon, BoldIcon, CaseUpperIcon, EyeIcon, BlurIcon
 } from '../Icons';
 
-export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, settings, onSettingsChange, onReset, offset, maxHeight, animationClass }: any) => {
+export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, settings, onSettingsChange, onReset, offset, onOffsetChange, maxHeight, animationClass }: any) => {
   const [view, setView] = useState<'main' | 'customize'>('main');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,7 +85,7 @@ export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, set
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { const player = (window as any)._strataPlayer; if (player) player.setSubtitleOffset(Math.round((offset - 0.1) * 10) / 10); }}
+                        onClick={() => onOffsetChange(Math.round((offset - 0.1) * 10) / 10)}
                         className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg hover:bg-zinc-700 text-zinc-300 transition-colors active:scale-95"
                       >
                         <MinusIcon className="w-4 h-4" />
@@ -94,7 +94,7 @@ export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, set
                         {offset > 0 ? '+' : ''}{offset?.toFixed(1) || '0.0'}s
                       </div>
                       <button
-                        onClick={() => { const player = (window as any)._strataPlayer; if (player) player.setSubtitleOffset(Math.round((offset + 0.1) * 10) / 10); }}
+                        onClick={() => onOffsetChange(Math.round((offset + 0.1) * 10) / 10)}
                         className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg hover:bg-zinc-700 text-zinc-300 transition-colors active:scale-95"
                       >
                         <PlusIcon className="w-4 h-4" />

@@ -4,7 +4,8 @@ import { Link, Route, Switch, useLocation, Router } from 'wouter';
 import { Home } from './pages/Home';
 import { Playground } from './pages/Playground';
 import { StrataLogo } from './ui/Icons';
-import './index.css';
+import './demo.css'; // Import global styles (tailwind base)
+import './index.css'; // Import library styles
 
 // Calculate the base path for routing.
 // We safely access import.meta.env to prevent crashes.

@@ -99,7 +99,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     useEffect(() => {
         if (!containerRef.current) return;
         const core = new StrataCore(config);
-        (window as any)._strataPlayer = core; // Hack for menu access to offset
 
         // Register plugins
         if (plugins && plugins.length > 0) {
@@ -123,7 +122,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             observer.disconnect();
             core.destroy();
             setPlayer(null);
-            (window as any)._strataPlayer = null;
         };
     }, []);
 
@@ -358,7 +356,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     return (
         <div
             ref={containerRef}
-            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none touch-none rounded-[var(--radius)] text-zinc-100"
+            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none touch-none rounded-[var(--radius)] text-zinc-100 strata-player-reset"
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen) setShowControls(false); }}
             tabIndex={0}
@@ -550,7 +548,22 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             <div className="flex items-center gap-1">
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
-                                    {subtitleTransition.isMounted && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'} />)}
+                                    {subtitleTransition.isMounted && (
+                                        <SubtitleMenu
+                                            tracks={state.subtitleTracks}
+                                            current={state.currentSubtitle}
+                                            onSelect={(idx: number) => player.setSubtitle(idx)}
+                                            onUpload={(file: File) => player.addTextTrack(file, file.name)}
+                                            onClose={() => setSubtitleMenuOpen(false)}
+                                            settings={state.subtitleSettings}
+                                            onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)}
+                                            onReset={() => player.resetSubtitleSettings()}
+                                            offset={state.subtitleOffset}
+                                            onOffsetChange={(val: number) => player.setSubtitleOffset(val)}
+                                            maxHeight={menuMaxHeight}
+                                            animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}
+                                        />
+                                    )}
                                 </div>
                                 <button onClick={() => player.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>
                                 <button onClick={() => player.download()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>

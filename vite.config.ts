@@ -29,21 +29,20 @@ export default defineConfig(({ mode }) => {
           fileName: (format) => `strataplayer.${format}.js`,
         },
         rollupOptions: {
-          // Critical: Externalize react-dom/client and jsx-runtime to prevent bundling issues
+          // Critical: Externalize react-dom/client and jsx-runtime to prevent bundling issues.
+          // We DO NOT externalize lucide-react, so icons are included in the bundle.
           external: [
             'react',
             'react-dom',
             'react-dom/client',
             'react/jsx-runtime',
-            'hls.js',
-            'lucide-react'
+            'hls.js'
           ],
           output: {
             globals: {
               react: 'React',
               'react-dom': 'ReactDOM',
-              'hls.js': 'Hls',
-              'lucide-react': 'Lucide'
+              'hls.js': 'Hls'
             },
             assetFileNames: (assetInfo) => {
               if (assetInfo.name === 'style.css') return 'style.css';
