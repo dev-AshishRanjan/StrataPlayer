@@ -46,11 +46,11 @@ const THEME_COLORS = [
     { label: 'Violet', value: '#8b5cf6' },
 ];
 
-const THEMES: { label: string, value: PlayerTheme }[] = [
-    { label: 'Default', value: 'default' },
-    { label: 'Pixel', value: 'pixel' },
-    { label: 'Game', value: 'game' },
-    { label: 'Hacker', value: 'hacker' },
+const THEMES: { label: string, value: PlayerTheme, color: string }[] = [
+    { label: 'Default', value: 'default', color: '#6366f1' },
+    { label: 'Pixel', value: 'pixel', color: '#ef4444' },
+    { label: 'Game', value: 'game', color: '#eab308' },
+    { label: 'Hacker', value: 'hacker', color: '#22c55e' },
 ];
 
 export const StrataPlayer = (props: StrataPlayerProps) => {
@@ -328,6 +328,33 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const iconClass = getIconClass();
     const btnClass = getButtonClass();
 
+    const getCenterSizes = () => {
+        switch (state.iconSize) {
+            case 'small':
+                return {
+                    playBtn: 'w-14 h-14',
+                    playIcon: 'w-6 h-6',
+                    skipBtn: 'w-10 h-10',
+                    skipIcon: 'w-5 h-5'
+                };
+            case 'large':
+                return {
+                    playBtn: 'w-24 h-24',
+                    playIcon: 'w-12 h-12',
+                    skipBtn: 'w-16 h-16',
+                    skipIcon: 'w-8 h-8'
+                };
+            default: // medium
+                return {
+                    playBtn: 'w-20 h-20',
+                    playIcon: 'w-9 h-9',
+                    skipBtn: 'w-12 h-12',
+                    skipIcon: 'w-6 h-6'
+                };
+        }
+    }
+    const center = getCenterSizes();
+
     return (
         <div
             ref={containerRef}
@@ -462,9 +489,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering ? (
                         <div className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}>
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"><Replay10Icon className="w-6 h-6" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className="group relative flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md">{state.isPlaying ? <PauseIcon className="w-8 h-8 md:w-9 md:h-9 text-white fill-current" /> : <PlayIcon className="w-8 h-8 md:w-9 md:h-9 text-white ml-1 fill-current" />}</button>
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('forward'); }} className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"><Forward10Icon className="w-6 h-6" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
+                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('forward'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Forward10Icon className={center.skipIcon} /></button>
                             </div>
                         </div>
                     ) : null}
@@ -533,7 +560,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                                         {activeMenu === 'main' && (
                                             <div className="animate-in slide-in-from-left-4 fade-in duration-200">
-                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
+                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
                                                 {state.sources.length > 1 && <MenuItem label="Source" value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />}
                                                 <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
                                                 <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
@@ -564,7 +591,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                                                     {THEMES.map(theme => (
                                                                         <button
                                                                             key={theme.value}
-                                                                            onClick={() => player.setAppearance({ theme: theme.value })}
+                                                                            onClick={() => player.setAppearance({ theme: theme.value, themeColor: theme.color })}
                                                                             className={`py-2 text-xs font-bold uppercase tracking-wide transition-colors border-[length:var(--border-width)] border-white/10 ${state.theme === theme.value ? 'bg-[var(--accent)] text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}
                                                                             style={{ borderRadius: 'var(--radius)' }}
                                                                         >
