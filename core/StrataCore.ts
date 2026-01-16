@@ -69,28 +69,37 @@ export interface PlayerState {
   theme: PlayerTheme;
 }
 
+export interface StrataConfig {
+  // Playback
+  volume?: number;
+  muted?: boolean;
+  playbackRate?: number;
+  audioGain?: number;
+
+  // Appearance
+  theme?: PlayerTheme;
+  themeColor?: string;
+  iconSize?: 'small' | 'medium' | 'large';
+
+  // Subtitles
+  subtitleSettings?: Partial<SubtitleSettings>;
+
+  // System
+  disablePersistence?: boolean;
+}
+
 const STORAGE_KEY = 'strata-settings-v3';
 
-const getSavedSettings = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch (e) { /* ignore */ }
-  return {};
-};
-
-const saved = getSavedSettings();
-
-export const INITIAL_STATE: PlayerState = {
+export const DEFAULT_STATE: PlayerState = {
   isPlaying: false,
   isBuffering: false,
   currentTime: 0,
   duration: 0,
   buffered: [],
-  volume: saved.volume ?? 1,
-  isMuted: saved.isMuted ?? false,
-  audioGain: 1, // Default to Off (1x)
-  playbackRate: saved.playbackRate ?? 1,
+  volume: 1,
+  isMuted: false,
+  audioGain: 1,
+  playbackRate: 1,
   qualityLevels: [],
   currentQuality: -1,
   audioTracks: [],
@@ -101,13 +110,57 @@ export const INITIAL_STATE: PlayerState = {
   subtitleTracks: [],
   currentSubtitle: -1,
   subtitleOffset: 0,
-  subtitleSettings: { ...DEFAULT_SUBTITLE_SETTINGS, ...(saved.subtitleSettings || {}) },
+  subtitleSettings: DEFAULT_SUBTITLE_SETTINGS,
   activeCues: [],
   viewMode: 'normal',
   notifications: [],
-  iconSize: saved.iconSize || 'medium',
-  themeColor: saved.themeColor || '#6366f1',
-  theme: saved.theme || 'default',
+  iconSize: 'medium',
+  themeColor: '#6366f1',
+  theme: 'default',
+};
+
+// Helper to merge Defaults -> LocalStorage -> Config
+export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
+  let saved: any = {};
+  if (!config.disablePersistence && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+  }
+
+  // Merge Strategy:
+  // 1. Start with DEFAULTS
+  // 2. Apply Saved Settings (User preferences)
+  // 3. Apply Config (Developer overrides)
+
+  // However, for "Design" props (theme, color, iconSize), if the dev explicitly passed a prop, 
+  // it should override the user's previous saved state (e.g. site redesign).
+  // For "User" props (volume, muted), user preference (Saved) usually trumps default config,
+  // UNLESS the dev explicitly sets it in this session (handled by passing config).
+
+  // To keep it deterministic: Config > Saved > Defaults.
+  // If a dev wants to respect user settings, they simply shouldn't pass the prop, or pass undefined.
+
+  const mergedSubtitleSettings = {
+    ...DEFAULT_SUBTITLE_SETTINGS,
+    ...(saved.subtitleSettings || {}),
+    ...(config.subtitleSettings || {})
+  };
+
+  return {
+    ...DEFAULT_STATE,
+    ...saved, // Load saved first
+    // Override with config if present (not undefined)
+    volume: config.volume ?? saved.volume ?? DEFAULT_STATE.volume,
+    isMuted: config.muted ?? saved.isMuted ?? DEFAULT_STATE.isMuted,
+    playbackRate: config.playbackRate ?? saved.playbackRate ?? DEFAULT_STATE.playbackRate,
+    audioGain: config.audioGain ?? saved.audioGain ?? DEFAULT_STATE.audioGain,
+    theme: config.theme ?? saved.theme ?? DEFAULT_STATE.theme,
+    themeColor: config.themeColor ?? saved.themeColor ?? DEFAULT_STATE.themeColor,
+    iconSize: config.iconSize ?? saved.iconSize ?? DEFAULT_STATE.iconSize,
+    subtitleSettings: mergedSubtitleSettings
+  };
 };
 
 export interface IPlugin {
@@ -131,6 +184,7 @@ export class StrataCore {
   public store: NanoStore<PlayerState>;
   private plugins: Map<string, IPlugin> = new Map();
   private audioEngine: AudioEngine;
+  private config: StrataConfig;
 
   // Retry Logic
   private retryCount = 0;
@@ -145,11 +199,16 @@ export class StrataCore {
   private boundCueChange: () => void;
   private boundFullscreenChange: () => void;
 
-  constructor(videoElement?: HTMLVideoElement) {
+  constructor(config: StrataConfig = {}, videoElement?: HTMLVideoElement) {
+    this.config = config;
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
     this.events = new EventBus();
-    this.store = new NanoStore(INITIAL_STATE);
+
+    // Initialize Store with resolved state
+    const initialState = getResolvedState(config);
+    this.store = new NanoStore(initialState);
+
     this.audioEngine = new AudioEngine(this.video);
     this.boundCueChange = this.handleCueChange.bind(this);
 
@@ -158,28 +217,32 @@ export class StrataCore {
       this.store.setState({ isFullscreen: !!document.fullscreenElement });
     };
 
-    this.video.volume = INITIAL_STATE.volume;
-    this.video.muted = INITIAL_STATE.isMuted;
-    this.video.playbackRate = INITIAL_STATE.playbackRate;
-    if (INITIAL_STATE.audioGain > 1) {
-      this.audioEngine.setGain(INITIAL_STATE.audioGain);
+    // Apply initial state to video element
+    this.video.volume = initialState.volume;
+    this.video.muted = initialState.isMuted;
+    this.video.playbackRate = initialState.playbackRate;
+    if (initialState.audioGain > 1) {
+      this.audioEngine.setGain(initialState.audioGain);
     }
 
     this.initVideoListeners();
     this.initCast();
 
-    this.store.subscribe((state) => {
-      const settings = {
-        volume: state.volume,
-        isMuted: state.isMuted,
-        playbackRate: state.playbackRate,
-        subtitleSettings: state.subtitleSettings,
-        iconSize: state.iconSize,
-        themeColor: state.themeColor,
-        theme: state.theme
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    });
+    // Persistence Subscriber
+    if (!config.disablePersistence) {
+      this.store.subscribe((state) => {
+        const settings = {
+          volume: state.volume,
+          isMuted: state.isMuted,
+          playbackRate: state.playbackRate,
+          subtitleSettings: state.subtitleSettings,
+          iconSize: state.iconSize,
+          themeColor: state.themeColor,
+          theme: state.theme
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      });
+    }
   }
 
   private initVideoListeners() {

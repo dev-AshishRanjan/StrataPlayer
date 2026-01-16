@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { StrataPlayer } from '../ui/StrataPlayer';
-import { TextTrackConfig } from '../core/StrataCore';
+import { TextTrackConfig, PlayerTheme } from '../core/StrataCore';
 
 interface VideoSource {
   name: string;
@@ -11,6 +11,9 @@ interface VideoSource {
   thumbnails?: string;
   poster?: string;
   tracks?: TextTrackConfig[];
+  // Demo overrides
+  theme?: PlayerTheme;
+  themeColor?: string;
 }
 
 const SOURCES: VideoSource[] = [
@@ -18,21 +21,25 @@ const SOURCES: VideoSource[] = [
     name: "Big Buck Bunny (Thumbnails)",
     src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
     desc: "HLS stream with reliable CORS-friendly storyboard thumbnails (Mux).",
-    tags: ["HLS", "Thumbnails"],
+    tags: ["HLS", "Thumbnails", "Default Theme"],
     thumbnails: "https://image.mux.com/VZtzUzGRv02OhRnZCxcNg49OilvolTqdnFLEqBsTwaxU/storyboard.vtt"
   },
   {
-    name: "Multi-Audio Test (Tears of Steel)",
+    name: "Cyberpunk Test (Hacker Theme)",
     src: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel-multi-lang.ism/.m3u8",
-    desc: "Tears of Steel HLS stream with multiple audio languages.",
-    tags: ["HLS", "Multi-Audio"]
+    desc: "Tears of Steel HLS stream initialized with the 'Hacker' theme and green accent.",
+    tags: ["HLS", "Hacker Theme"],
+    theme: 'hacker',
+    themeColor: '#22c55e'
   },
   {
-    name: "Sintel (External Subs & Poster)",
+    name: "Sintel (Game Theme)",
     src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
     poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg",
-    desc: "MP4 file with verified external VTT subtitles and a poster image.",
-    tags: ["MP4", "VTT Subs", "Poster"],
+    desc: "MP4 file with verified external VTT subtitles, initialized with the 'Game' theme.",
+    tags: ["MP4", "VTT Subs", "Game Theme"],
+    theme: 'game',
+    themeColor: '#eab308',
     tracks: [
       { kind: 'subtitles', label: 'English', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_en.vtt', srcLang: 'en', default: true },
       { kind: 'subtitles', label: 'Spanish', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_es.vtt', srcLang: 'es' },
@@ -43,7 +50,9 @@ const SOURCES: VideoSource[] = [
     name: "Broken Stream (Test Retry)",
     src: "https://httpstat.us/404",
     desc: "Intentionally broken URL to test the 5-step verbose retry logic.",
-    tags: ["Error Test"]
+    tags: ["Error Test", "Pixel Theme"],
+    theme: 'pixel',
+    themeColor: '#ef4444'
   }
 ];
 
@@ -63,6 +72,10 @@ export const Home = () => {
             thumbnails={currentSource.thumbnails}
             textTracks={currentSource.tracks}
             autoPlay={false}
+
+            // Pass demo config
+            theme={currentSource.theme}
+            themeColor={currentSource.themeColor}
           />
         </div>
 

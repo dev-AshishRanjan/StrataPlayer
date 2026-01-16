@@ -1,6 +1,6 @@
 
-import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react';
-import { StrataCore, PlayerState, INITIAL_STATE, TextTrackConfig, SubtitleSettings, PlayerTheme } from '../core/StrataCore';
+import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
+import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE } from '../core/StrataCore';
 import { HlsPlugin } from '../plugins/HlsPlugin';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
@@ -27,7 +27,7 @@ declare module 'react' {
 
 // --- Main Player Component ---
 
-interface StrataPlayerProps {
+interface StrataPlayerProps extends StrataConfig {
     src: string;
     poster?: string;
     autoPlay?: boolean;
@@ -51,16 +51,22 @@ const THEMES: { label: string, value: PlayerTheme }[] = [
     { label: 'Hacker', value: 'hacker' },
 ];
 
-export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: StrataPlayerProps) => {
+export const StrataPlayer = (props: StrataPlayerProps) => {
+    const { src, poster, autoPlay, thumbnails, textTracks, ...config } = props;
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
     const [hasPlayed, setHasPlayed] = useState(false);
     const [playerHeight, setPlayerHeight] = useState(0);
 
+    // Resolve initial state based on props + defaults + localStorage BEFORE mounting
+    // This prevents layout shift or theme flash on first render
+    const initialState = useMemo(() => getResolvedState(config), []);
+
     const state = useSyncExternalStore<PlayerState>(
         useCallback((cb) => player ? player.store.subscribe(cb) : () => { }, [player]),
-        () => player ? player.store.get() : INITIAL_STATE,
-        () => INITIAL_STATE
+        () => player ? player.store.get() : initialState,
+        () => initialState
     );
 
     const [showControls, setShowControls] = useState(true);
@@ -90,7 +96,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
 
     useEffect(() => {
         if (!containerRef.current) return;
-        const core = new StrataCore();
+        const core = new StrataCore(config);
         (window as any)._strataPlayer = core; // Hack for menu access to offset
         core.use(new HlsPlugin());
         core.attach(containerRef.current);
@@ -110,6 +116,28 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
             (window as any)._strataPlayer = null;
         };
     }, []);
+
+    // Reactive Prop Updates
+    useEffect(() => {
+        if (!player) return;
+        // Update appearance if props change
+        const updates: any = {};
+        if (config.theme !== undefined && config.theme !== state.theme) updates.theme = config.theme;
+        if (config.themeColor !== undefined && config.themeColor !== state.themeColor) updates.themeColor = config.themeColor;
+        if (config.iconSize !== undefined && config.iconSize !== state.iconSize) updates.iconSize = config.iconSize;
+
+        if (Object.keys(updates).length > 0) {
+            player.setAppearance(updates);
+        }
+
+        // Update volume/mute if controlled props change
+        if (config.volume !== undefined && Math.abs(config.volume - state.volume) > 0.01) player.setVolume(config.volume);
+        if (config.muted !== undefined && config.muted !== state.isMuted) {
+            if (config.muted) player.video.muted = true;
+            else { player.video.muted = false; }
+            // State update happens via listener
+        }
+    }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted]);
 
     useEffect(() => {
         if (player && src) {
