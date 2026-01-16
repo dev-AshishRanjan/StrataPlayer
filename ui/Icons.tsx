@@ -22,7 +22,8 @@ import {
   Users,
   Clock,
   Minus,
-  Plus
+  Plus,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -45,6 +46,7 @@ export const UsersIcon = Users;
 export const ClockIcon = Clock;
 export const MinusIcon = Minus;
 export const PlusIcon = Plus;
+export const CustomizeIcon = SlidersHorizontal;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (

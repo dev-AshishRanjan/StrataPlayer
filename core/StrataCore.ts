@@ -437,13 +437,14 @@ export class StrataCore {
     const initializeCastApi = () => {
       if (this.castInitialized) return;
       try {
-        const CastContext = w.cast.framework.CastContext;
-        // Proper init is required before requestSession works
-        CastContext.getInstance().setOptions({
-          receiverApplicationId: w.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-          autoJoinPolicy: w.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-        });
-        this.castInitialized = true;
+        if (w.cast && w.cast.framework && w.chrome && w.chrome.cast) {
+          const CastContext = w.cast.framework.CastContext;
+          CastContext.getInstance().setOptions({
+            receiverApplicationId: w.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+            autoJoinPolicy: w.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+          });
+          this.castInitialized = true;
+        }
       } catch (e) {
         console.warn('Cast Init Error or already initialized', e);
       }
@@ -472,7 +473,7 @@ export class StrataCore {
             if (e !== 'cancel') this.notify({ type: 'error', message: 'Cast failed: ' + e, duration: 3000 });
           });
       } catch (e) {
-        this.notify({ type: 'warning', message: 'Cast not available', duration: 3000 });
+        this.notify({ type: 'warning', message: 'Cast not available yet', duration: 3000 });
       }
     } else {
       this.notify({ type: 'warning', message: 'Cast API not loaded', duration: 3000 });

@@ -6,7 +6,8 @@ import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, CheckIcon, PipIcon,
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon, ArrowLeftIcon,
-    UploadIcon, LoaderIcon, CastIcon, UsersIcon, ClockIcon, MinusIcon, PlusIcon
+    UploadIcon, LoaderIcon, CastIcon, UsersIcon, ClockIcon, MinusIcon, PlusIcon,
+    CustomizeIcon
 } from './Icons';
 
 declare module 'react' {
@@ -174,7 +175,8 @@ const Menu = ({ children, onClose, align = 'right' }: { children?: React.ReactNo
     );
 };
 
-const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => {
+const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, offset, onOffsetChange }: any) => {
+    const [view, setView] = useState<'main' | 'customize'>('main');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
@@ -182,39 +184,93 @@ const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose }: any) => 
             className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 origin-bottom bg-zinc-950/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-[260px] text-sm animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 z-50 ring-1 ring-white/5 font-sans"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="px-4 py-3 border-b border-white/10 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5">
-                <span>Subtitles</span>
-                <button onClick={() => fileInputRef.current?.click()} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition-colors font-medium">
-                    <UploadIcon className="w-3.5 h-3.5" /> Upload
-                </button>
-                <input
-                    type="file"
-                    accept=".vtt,.srt"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                            onUpload(e.target.files[0]);
-                        }
-                    }}
-                />
-            </div>
-            <div className="max-h-[250px] overflow-y-auto hide-scrollbar py-1">
-                <MenuItem
-                    label="Off"
-                    active={current === -1}
-                    onClick={() => { onSelect(-1); onClose(); }}
-                />
-                {tracks.map((track: any) => (
-                    <MenuItem
-                        key={track.index}
-                        label={track.label}
-                        value={track.language}
-                        active={current === track.index}
-                        onClick={() => { onSelect(track.index); onClose(); }}
-                    />
-                ))}
-            </div>
+            {view === 'main' && (
+                <div className="animate-in slide-in-from-left-4 fade-in duration-200">
+                    <div className="px-4 py-3 border-b border-white/10 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5">
+                        <span>Subtitles</span>
+                    </div>
+                    <div className="max-h-[250px] overflow-y-auto hide-scrollbar py-1">
+                        <MenuItem
+                            label="Off"
+                            active={current === -1}
+                            onClick={() => { onSelect(-1); onClose(); }}
+                        />
+                        {tracks.map((track: any) => (
+                            <MenuItem
+                                key={track.index}
+                                label={track.label}
+                                value={track.language}
+                                active={current === track.index}
+                                onClick={() => { onSelect(track.index); onClose(); }}
+                            />
+                        ))}
+                        <MenuDivider />
+                        <MenuItem
+                            label="Upload Subtitle"
+                            icon={<UploadIcon className="w-4 h-4" />}
+                            onClick={() => fileInputRef.current?.click()}
+                        />
+                        <input
+                            type="file"
+                            accept=".vtt,.srt"
+                            ref={fileInputRef}
+                            className="hidden"
+                            onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                    onUpload(e.target.files[0]);
+                                }
+                            }}
+                        />
+                        <MenuItem
+                            label="Customize"
+                            icon={<CustomizeIcon className="w-4 h-4" />}
+                            onClick={() => setView('customize')}
+                            hasSubmenu
+                        />
+                    </div>
+                </div>
+            )}
+
+            {view === 'customize' && (
+                <div className="animate-in slide-in-from-right-4 fade-in duration-200">
+                    <MenuHeader label="Customize" onBack={() => setView('main')} />
+                    <div className="py-2">
+                        <div className="px-4 py-3">
+                            <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <ClockIcon className="w-3 h-3" />
+                                <span>Sync Offset</span>
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-3 flex flex-col items-center gap-3 border border-white/5">
+                                <div className="text-3xl font-mono font-bold tabular-nums text-zinc-100">
+                                    {offset > 0 ? '+' : ''}{offset.toFixed(1)}s
+                                </div>
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={() => onOffsetChange(Math.round((offset - 0.1) * 10) / 10)}
+                                        className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center text-zinc-200"
+                                        title="Delay -0.1s"
+                                    >
+                                        <MinusIcon className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => onOffsetChange(Math.round((offset + 0.1) * 10) / 10)}
+                                        className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center text-zinc-200"
+                                        title="Delay +0.1s"
+                                    >
+                                        <PlusIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => onOffsetChange(0)}
+                                    className="text-xs text-zinc-500 hover:text-white transition-colors"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -804,6 +860,8 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                             onSelect={(idx: number) => player.setSubtitle(idx)}
                                             onUpload={(file: File) => player.addTextTrack(file, file.name)}
                                             onClose={() => setSubtitleMenuOpen(false)}
+                                            offset={state.subtitleOffset}
+                                            onOffsetChange={(val: number) => player.setSubtitleOffset(val)}
                                         />
                                     )}
                                 </div>
@@ -862,13 +920,6 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                         />
                                                         <MenuDivider />
                                                         <MenuItem
-                                                            label="Subtitle Offset"
-                                                            value={`${state.subtitleOffset > 0 ? '+' : ''}${state.subtitleOffset.toFixed(1)}s`}
-                                                            icon={<ClockIcon className="w-4 h-4" />}
-                                                            onClick={() => setActiveMenu('offset')}
-                                                            hasSubmenu
-                                                        />
-                                                        <MenuItem
                                                             label="Watch Party"
                                                             icon={<UsersIcon className="w-4 h-4" />}
                                                             onClick={() => setActiveMenu('party')}
@@ -885,7 +936,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                     </div>
                                                 )}
                                                 {/* Submenus */}
-                                                {['speed', 'quality', 'audio', 'boost', 'offset', 'party'].includes(activeMenu) && (
+                                                {['speed', 'quality', 'audio', 'boost', 'party'].includes(activeMenu) && (
                                                     <div className="animate-in slide-in-from-right-4 fade-in duration-200">
                                                         {activeMenu === 'speed' && (
                                                             <>
@@ -921,36 +972,6 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                                 ))}
                                                             </>
                                                         )}
-                                                        {activeMenu === 'offset' && (
-                                                            <>
-                                                                <MenuHeader label="Subtitle Offset" onBack={() => setActiveMenu('main')} />
-                                                                <div className="px-4 py-4 flex flex-col items-center gap-3">
-                                                                    <div className="text-3xl font-mono font-bold tabular-nums text-zinc-100">
-                                                                        {state.subtitleOffset > 0 ? '+' : ''}{state.subtitleOffset.toFixed(1)}s
-                                                                    </div>
-                                                                    <div className="flex gap-3 w-full">
-                                                                        <button
-                                                                            onClick={() => player.setSubtitleOffset(Math.round((state.subtitleOffset - 0.1) * 10) / 10)}
-                                                                            className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center"
-                                                                        >
-                                                                            <MinusIcon className="w-5 h-5" />
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => player.setSubtitleOffset(Math.round((state.subtitleOffset + 0.1) * 10) / 10)}
-                                                                            className="flex-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all p-2 rounded-lg flex items-center justify-center"
-                                                                        >
-                                                                            <PlusIcon className="w-5 h-5" />
-                                                                        </button>
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={() => player.setSubtitleOffset(0)}
-                                                                        className="text-xs text-zinc-500 hover:text-white transition-colors mt-2"
-                                                                    >
-                                                                        Reset Offset
-                                                                    </button>
-                                                                </div>
-                                                            </>
-                                                        )}
                                                         {activeMenu === 'party' && (
                                                             <>
                                                                 <MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} />
@@ -959,7 +980,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                                         Create a synchronized room on WatchParty.me to watch together.
                                                                     </p>
                                                                     <a
-                                                                        href={`https://www.watchparty.me/#${src}`}
+                                                                        href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                         className="flex items-center justify-center w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-xs"
