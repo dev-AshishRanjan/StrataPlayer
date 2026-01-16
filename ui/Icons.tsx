@@ -78,3 +78,18 @@ export const Forward10Icon = ({ className }: { className?: string }) => (
     <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">10</span>
   </div>
 );
+
+export const StrataLogo = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <linearGradient id="strata-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6366f1" />
+        <stop offset="1" stopColor="#a855f7" />
+      </linearGradient>
+    </defs>
+    <rect width="64" height="64" rx="16" fill="url(#strata-grad)" />
+    <path d="M24 20V44L46 32L24 20Z" fill="white" />
+    <path d="M20 28H50" stroke="url(#strata-grad)" strokeWidth="3" strokeLinecap="round" />
+    <path d="M20 36H50" stroke="url(#strata-grad)" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+);

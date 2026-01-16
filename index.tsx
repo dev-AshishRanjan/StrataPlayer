@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import { Home } from './pages/Home';
 import { Playground } from './pages/Playground';
+import { StrataLogo } from './ui/Icons';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
     const [location] = useLocation();
@@ -25,8 +26,8 @@ const App = () => {
             <nav className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <Link href="/">
-                        <div className="flex items-center gap-2 cursor-pointer group">
-                            <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-lg shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform"></div>
+                        <div className="flex items-center gap-3 cursor-pointer group">
+                            <StrataLogo className="w-9 h-9 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform" />
                             <span className="font-bold text-xl tracking-tight group-hover:text-white transition-colors">StrataPlayer</span>
                         </div>
                     </Link>
