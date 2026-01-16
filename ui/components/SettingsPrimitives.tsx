@@ -12,7 +12,7 @@ export const Toggle = ({ label, checked, onChange, icon }: any) => (
     </div>
     <button
       onClick={() => onChange(!checked)}
-      className={`w-11 h-6 transition-colors relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${checked ? 'bg-[var(--accent)]' : 'bg-zinc-700'}`}
+      className={`w-11 h-6 shrink-0 transition-colors relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${checked ? 'bg-[var(--accent)]' : 'bg-zinc-700'}`}
       style={{
         '--tw-ring-color': 'var(--accent)',
         borderRadius: 'var(--radius-full)',
@@ -21,7 +21,7 @@ export const Toggle = ({ label, checked, onChange, icon }: any) => (
       } as React.CSSProperties}
     >
       <div
-        className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'}`}
+        className={`absolute top-1/2 -translate-y-1/2 left-0.5 bg-white w-4 h-4 transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'}`}
         style={{ borderRadius: 'var(--radius-full)' }}
       />
     </button>

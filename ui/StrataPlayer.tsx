@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
-import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE } from '../core/StrataCore';
+import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource } from '../core/StrataCore';
 import { HlsPlugin } from '../plugins/HlsPlugin';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
@@ -28,11 +28,13 @@ declare module 'react' {
 // --- Main Player Component ---
 
 interface StrataPlayerProps extends StrataConfig {
-    src: string;
+    src?: string; // Optional if sources are provided
+    sources?: PlayerSource[]; // Array of sources
     poster?: string;
     autoPlay?: boolean;
     thumbnails?: string; // URL to VTT thumbnails
     textTracks?: TextTrackConfig[];
+    plugins?: IPlugin[]; // Allow injecting plugins from outside
 }
 
 const THEME_COLORS = [
@@ -52,7 +54,7 @@ const THEMES: { label: string, value: PlayerTheme }[] = [
 ];
 
 export const StrataPlayer = (props: StrataPlayerProps) => {
-    const { src, poster, autoPlay, thumbnails, textTracks, ...config } = props;
+    const { src, sources, poster, autoPlay, thumbnails, textTracks, plugins, ...config } = props;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
@@ -72,7 +74,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance'>('main');
+    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance' | 'sources'>('main');
 
     // Transition States
     const settingsTransition = useTransition(settingsOpen, 200);
@@ -98,7 +100,15 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (!containerRef.current) return;
         const core = new StrataCore(config);
         (window as any)._strataPlayer = core; // Hack for menu access to offset
-        core.use(new HlsPlugin());
+
+        // Register plugins
+        if (plugins && plugins.length > 0) {
+            plugins.forEach(p => core.use(p));
+        } else {
+            // Fallback default HLS plugin if none provided (for backward compat)
+            core.use(new HlsPlugin());
+        }
+
         core.attach(containerRef.current);
         setPlayer(core);
 
@@ -140,11 +150,20 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted]);
 
     useEffect(() => {
-        if (player && src) {
+        if (!player) return;
+
+        const tracks = textTracks || [];
+
+        // Priority: Sources Array > Single Src
+        if (sources && sources.length > 0) {
             setHasPlayed(false);
-            player.load(src, textTracks);
+            player.setSources(sources, tracks);
+        } else if (src) {
+            setHasPlayed(false);
+            player.setSources([{ url: src, type: 'auto' }], tracks);
         }
-    }, [src, textTracks, player]);
+
+    }, [src, sources, textTracks, player]);
 
     useEffect(() => {
         // We handle poster manually to support cover
@@ -330,6 +349,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --font-main: "Inter", sans-serif;
                     --border-width: 0px;
                     --bg-panel: rgba(9, 9, 11, 0.95);
+                    --tooltip-bg: #ffffff;
+                    --tooltip-text: #000000;
+                    --tooltip-border: 0px solid transparent;
                 }
                 [data-theme="pixel"] {
                     --radius: 0px;
@@ -339,6 +361,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --font-main: "Press Start 2P", cursive;
                     --border-width: 2px;
                     --bg-panel: #000000;
+                    --tooltip-bg: #000000;
+                    --tooltip-text: #ffffff;
+                    --tooltip-border: 2px solid #ffffff;
                     image-rendering: pixelated;
                 }
                 [data-theme="game"] {
@@ -349,6 +374,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --font-main: "Cinzel", serif;
                     --border-width: 1px;
                     --bg-panel: #0a0a0a;
+                    --tooltip-bg: #1a1a1a;
+                    --tooltip-text: #ffffff;
+                    --tooltip-border: 1px solid var(--accent);
                 }
                 [data-theme="hacker"] {
                     --radius: 0px;
@@ -358,6 +386,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --font-main: "JetBrains Mono", monospace;
                     --border-width: 1px;
                     --bg-panel: #000000;
+                    --tooltip-bg: #000000;
+                    --tooltip-text: var(--accent);
+                    --tooltip-border: 1px solid var(--accent);
                     text-shadow: 0 0 5px var(--accent);
                 }
                 
@@ -391,6 +422,14 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     pointer-events: none;
                     z-index: 40;
                 }
+
+                .strata-tooltip {
+                    background-color: var(--tooltip-bg);
+                    color: var(--tooltip-text);
+                    border: var(--tooltip-border);
+                    border-radius: var(--radius-sm);
+                    font-family: var(--font-main);
+                }
             `}</style>
 
             {state.theme === 'hacker' && <div className="strata-scanlines" />}
@@ -419,7 +458,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         </div>
                     )}
                     {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
-                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.video.src, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
+                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
                     {((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering ? (
                         <div className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}>
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
@@ -438,7 +477,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             onMouseDown={handleSeekStart}
                             onTouchStart={handleSeekStart}
                         >
-                            {hoverTime !== null && (<div className="absolute bottom-full mb-4 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px`, borderRadius: 'var(--radius)' }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums mt-2">{formatTime(hoverTime)}</div></div>)}
+                            {hoverTime !== null && (<div className="absolute bottom-full mb-1.5 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px`, borderRadius: 'var(--radius)' }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="strata-tooltip px-2 py-0.5 text-[11px] font-bold font-mono shadow-lg tabular-nums mt-1">{formatTime(hoverTime)}</div></div>)}
 
                             {/* Track */}
                             <div className="w-full h-1 bg-white/20 overflow-hidden relative backdrop-blur-sm border-[length:var(--border-width)] border-white/10" style={{ borderRadius: 'var(--radius-full)' }}>
@@ -471,7 +510,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     </div>
                                     {(isVolumeHovered || isVolumeScrubbing) && (
                                         <div
-                                            className="absolute bottom-full mb-3 bg-white text-black px-1.5 py-0.5 rounded text-[10px] font-bold font-mono shadow-lg pointer-events-none whitespace-nowrap z-50 transform -translate-x-1/2"
+                                            className="strata-tooltip absolute bottom-full mb-2 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono shadow-lg pointer-events-none whitespace-nowrap z-50 transform -translate-x-1/2"
                                             style={{ left: `calc(52px + ${(state.isMuted ? 0 : state.volume) * 80}px)` }}
                                         >
                                             {state.isMuted ? '0%' : `${Math.round(state.volume * 100)}%`}
@@ -482,7 +521,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                 <div className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className={`strata-control-btn hover:bg-white/10 flex items-center justify-center transition-colors ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><google-cast-launcher></google-cast-launcher></div>
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
                                     {subtitleTransition.isMounted && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'} />)}
@@ -496,6 +534,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                         {activeMenu === 'main' && (
                                             <div className="animate-in slide-in-from-left-4 fade-in duration-200">
                                                 <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
+                                                {state.sources.length > 1 && <MenuItem label="Source" value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />}
                                                 <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
                                                 <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
                                                 <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
@@ -508,13 +547,14 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                             </div>
                                         )}
 
-                                        {['speed', 'quality', 'audio', 'boost', 'party', 'appearance'].includes(activeMenu) && (
+                                        {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources'].includes(activeMenu) && (
                                             <div className="animate-in slide-in-from-right-4 fade-in duration-200">
+                                                {activeMenu === 'sources' && (<><MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />{state.sources.map((src, i) => (<MenuItem key={i} label={src.name || `Source ${i + 1}`} value={src.type} active={state.currentSourceIndex === i} onClick={() => player.switchSource(i)} />))}</>)}
                                                 {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}
                                                 {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}
                                                 {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}
                                                 {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}
-                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
+                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
                                                 {activeMenu === 'appearance' && (
                                                     <>
                                                         <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />

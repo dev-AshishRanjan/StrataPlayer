@@ -16,14 +16,22 @@ export class HlsPlugin implements IPlugin {
     this.core = core;
 
     // Listen for load requests
-    this.core.events.on('load', (url: string) => {
-      if (!url.includes('.m3u8')) return;
-
-      if (window.Hls && window.Hls.isSupported()) {
-        this.loadHls(url);
-      } else if (this.core!.video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS fallback (Safari)
-        this.core!.video.src = url;
+    this.core.events.on('load', (data: { url: string, type: string }) => {
+      // Only proceed if type matches HLS
+      if (data.type === 'hls' || data.url.includes('.m3u8')) {
+        if (window.Hls && window.Hls.isSupported()) {
+          this.loadHls(data.url);
+        } else if (this.core!.video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native HLS fallback (Safari) - Core sets src, we do nothing
+          // Core already handles setting video.src if standard
+          this.core!.video.src = data.url;
+        }
+      } else {
+        // If we had an active HLS instance but switched to MP4, destroy it
+        if (this.hls) {
+          this.hls.destroy();
+          this.hls = null;
+        }
       }
     });
 

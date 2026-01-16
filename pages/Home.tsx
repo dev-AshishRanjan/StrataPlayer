@@ -1,11 +1,14 @@
-
 import React, { useState } from 'react';
 import { StrataPlayer } from '../ui/StrataPlayer';
-import { TextTrackConfig, PlayerTheme } from '../core/StrataCore';
+import { TextTrackConfig, PlayerTheme, PlayerSource } from '../core/StrataCore';
+import { HlsPlugin } from '../plugins/HlsPlugin';
 
 interface VideoSource {
   name: string;
-  src: string;
+  // Single source fallback
+  src?: string;
+  // Multi-source support
+  sources?: PlayerSource[];
   desc: string;
   tags: string[];
   thumbnails?: string;
@@ -19,8 +22,11 @@ interface VideoSource {
 const SOURCES: VideoSource[] = [
   {
     name: "Big Buck Bunny (Thumbnails)",
-    src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    desc: "HLS stream with reliable CORS-friendly storyboard thumbnails (Mux).",
+    sources: [
+      { name: 'HLS Auto', url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: 'hls' },
+      { name: 'MP4 Fallback', url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: 'mp4' }
+    ],
+    desc: "HLS stream with reliable CORS-friendly storyboard thumbnails (Mux). Includes MP4 fallback source.",
     tags: ["HLS", "Thumbnails", "Default Theme"],
     thumbnails: "https://image.mux.com/VZtzUzGRv02OhRnZCxcNg49OilvolTqdnFLEqBsTwaxU/storyboard.vtt"
   },
@@ -59,6 +65,9 @@ const SOURCES: VideoSource[] = [
 export const Home = () => {
   const [currentSource, setCurrentSource] = useState(SOURCES[0]);
 
+  // Example of passing plugins array (though HlsPlugin is default, showing explicit injection)
+  const plugins = [new HlsPlugin()];
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 w-full grid lg:grid-cols-12 gap-12 animate-in fade-in duration-500">
 
@@ -66,12 +75,14 @@ export const Home = () => {
       <div className="lg:col-span-8 flex flex-col gap-6">
         <div className="aspect-video w-full bg-black rounded-2xl shadow-2xl overflow-hidden ring-1 ring-white/10 relative z-0">
           <StrataPlayer
-            key={currentSource.src} // Force remount on source change
+            key={currentSource.name} // Force remount on source change
             src={currentSource.src}
+            sources={currentSource.sources}
             poster={currentSource.poster}
             thumbnails={currentSource.thumbnails}
             textTracks={currentSource.tracks}
             autoPlay={false}
+            plugins={plugins}
 
             // Pass demo config
             theme={currentSource.theme}
@@ -103,13 +114,13 @@ export const Home = () => {
               <button
                 key={i}
                 onClick={() => setCurrentSource(item)}
-                className={`w-full text-left p-4 hover:bg-white/5 transition-all duration-200 flex items-center gap-4 group ${currentSource.src === item.src ? 'bg-indigo-500/10 border-l-2 border-indigo-500' : 'border-l-2 border-transparent'}`}
+                className={`w-full text-left p-4 hover:bg-white/5 transition-all duration-200 flex items-center gap-4 group ${currentSource.name === item.name ? 'bg-indigo-500/10 border-l-2 border-indigo-500' : 'border-l-2 border-transparent'}`}
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-mono shrink-0 transition-colors ${currentSource.src === item.src ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40' : 'bg-white/10 text-zinc-400 group-hover:bg-white/20'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-mono shrink-0 transition-colors ${currentSource.name === item.name ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40' : 'bg-white/10 text-zinc-400 group-hover:bg-white/20'}`}>
                   {i + 1}
                 </div>
                 <div>
-                  <div className={`font-medium transition-colors ${currentSource.src === item.src ? 'text-indigo-400' : 'text-zinc-300 group-hover:text-white'}`}>{item.name}</div>
+                  <div className={`font-medium transition-colors ${currentSource.name === item.name ? 'text-indigo-400' : 'text-zinc-300 group-hover:text-white'}`}>{item.name}</div>
                   <div className="text-xs text-zinc-500 mt-1">{item.tags.join(', ')}</div>
                 </div>
               </button>

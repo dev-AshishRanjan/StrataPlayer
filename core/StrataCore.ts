@@ -39,6 +39,12 @@ export const DEFAULT_SUBTITLE_SETTINGS: SubtitleSettings = {
 
 export type PlayerTheme = 'default' | 'pixel' | 'game' | 'hacker';
 
+export interface PlayerSource {
+  url: string;
+  type?: 'hls' | 'mp4' | 'webm' | 'dash' | string;
+  name?: string;
+}
+
 export interface PlayerState {
   isPlaying: boolean;
   isBuffering: boolean;
@@ -67,6 +73,9 @@ export interface PlayerState {
   iconSize: 'small' | 'medium' | 'large';
   themeColor: string;
   theme: PlayerTheme;
+  // Sources
+  sources: PlayerSource[];
+  currentSourceIndex: number;
 }
 
 export interface StrataConfig {
@@ -117,6 +126,8 @@ export const DEFAULT_STATE: PlayerState = {
   iconSize: 'medium',
   themeColor: '#6366f1',
   theme: 'default',
+  sources: [],
+  currentSourceIndex: -1,
 };
 
 // Helper to merge Defaults -> LocalStorage -> Config
@@ -128,19 +139,6 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
       if (raw) saved = JSON.parse(raw);
     } catch (e) { /* ignore */ }
   }
-
-  // Merge Strategy:
-  // 1. Start with DEFAULTS
-  // 2. Apply Saved Settings (User preferences)
-  // 3. Apply Config (Developer overrides)
-
-  // However, for "Design" props (theme, color, iconSize), if the dev explicitly passed a prop, 
-  // it should override the user's previous saved state (e.g. site redesign).
-  // For "User" props (volume, muted), user preference (Saved) usually trumps default config,
-  // UNLESS the dev explicitly sets it in this session (handled by passing config).
-
-  // To keep it deterministic: Config > Saved > Defaults.
-  // If a dev wants to respect user settings, they simply shouldn't pass the prop, or pass undefined.
 
   const mergedSubtitleSettings = {
     ...DEFAULT_SUBTITLE_SETTINGS,
@@ -190,6 +188,7 @@ export class StrataCore {
   private retryCount = 0;
   private maxRetries = 5;
   private retryTimer: any = null;
+  private currentSource: PlayerSource | null = null;
   private currentSrc: string = '';
   private currentTracks: TextTrackConfig[] = [];
 
@@ -315,19 +314,22 @@ export class StrataCore {
 
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = setTimeout(() => {
-        const time = this.video.currentTime;
-        this.load(this.currentSrc, this.currentTracks, true); // True = isRetry
-        if (time > 0) {
-          const onCanPlay = () => {
-            this.video.currentTime = time;
-            this.video.removeEventListener('canplay', onCanPlay);
-          };
-          this.video.addEventListener('canplay', onCanPlay);
+        if (this.currentSource) {
+          this.load(this.currentSource, this.currentTracks, true); // True = isRetry
+
+          const time = this.store.get().currentTime;
+          if (time > 0) {
+            const onCanPlay = () => {
+              this.video.currentTime = time;
+              this.video.removeEventListener('canplay', onCanPlay);
+            };
+            this.video.addEventListener('canplay', onCanPlay);
+          }
         }
       }, delay);
     } else {
       // Final failure
-      this.removeNotification('retry'); // Remove the spinner notification
+      this.removeNotification('retry');
       const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
       this.store.setState({ error: finalMsg });
     }
@@ -354,6 +356,12 @@ export class StrataCore {
           index: index
         }));
       this.store.setState({ subtitleTracks: tracks });
+
+      // Restore persisted selection if applicable and tracks exist
+      const state = this.store.get();
+      if (state.currentSubtitle !== -1 && tracks.length > 0 && state.currentSubtitle < tracks.length) {
+        this.setSubtitle(state.currentSubtitle);
+      }
     }, 50);
   }
 
@@ -392,8 +400,36 @@ export class StrataCore {
     this.plugins.set(plugin.name, plugin);
   }
 
-  load(url: string, tracks: TextTrackConfig[] = [], isRetry = false) {
+  setSources(sources: PlayerSource[], tracks: TextTrackConfig[] = []) {
+    this.store.setState({ sources });
+    this.currentTracks = tracks;
+    if (sources.length > 0) {
+      this.load(sources[0], tracks);
+    }
+  }
+
+  switchSource(index: number) {
+    const sources = this.store.get().sources;
+    if (index >= 0 && index < sources.length) {
+      const time = this.video.currentTime;
+      const wasPlaying = !this.video.paused;
+
+      this.load(sources[index], this.currentTracks);
+
+      const onCanPlay = () => {
+        this.video.currentTime = time;
+        if (wasPlaying) this.video.play();
+        this.video.removeEventListener('canplay', onCanPlay);
+      };
+      this.video.addEventListener('canplay', onCanPlay);
+    }
+  }
+
+  load(source: PlayerSource | string, tracks: TextTrackConfig[] = [], isRetry = false) {
     if (this.retryTimer) clearTimeout(this.retryTimer);
+
+    // Normalize string input to PlayerSource
+    const srcObj: PlayerSource = typeof source === 'string' ? { url: source, type: 'auto' } : source;
 
     if (!isRetry) {
       this.retryCount = 0;
@@ -401,17 +437,33 @@ export class StrataCore {
       this.removeNotification('retry');
     }
 
-    this.currentSrc = url;
+    this.currentSrc = srcObj.url;
+    this.currentSource = srcObj;
     this.currentTracks = tracks;
 
+    // Update index state if part of playlist
+    const allSources = this.store.get().sources;
+    const index = allSources.findIndex(s => s.url === srcObj.url);
     this.store.setState({
       isBuffering: true,
       qualityLevels: [],
+      currentQuality: -1, // Reset quality to Auto on source switch
       audioTracks: [],
-      subtitleTracks: []
+      currentAudioTrack: -1, // Reset audio track
+      // subtitleTracks and currentSubtitle are purposely preserved
+      currentSourceIndex: index
     });
 
-    this.events.emit('load', url);
+    // Determine type if auto
+    let type = srcObj.type || 'auto';
+    if (type === 'auto') {
+      if (srcObj.url.includes('.m3u8')) type = 'hls';
+      else if (srcObj.url.includes('.mpd')) type = 'dash';
+      else type = 'mp4';
+    }
+
+    // Emit load event with source details so plugins can decide to act
+    this.events.emit('load', { url: srcObj.url, type });
 
     const oldTracks = this.video.getElementsByTagName('track');
     while (oldTracks.length > 0) {
@@ -428,8 +480,9 @@ export class StrataCore {
       });
     }
 
-    if (!url.includes('.m3u8')) {
-      this.video.src = url;
+    // If it's standard MP4/WebM, set src directly. Plugins handle HLS/Dash.
+    if (type === 'mp4' || type === 'webm' || type === 'ogg') {
+      this.video.src = srcObj.url;
     }
   }
 
