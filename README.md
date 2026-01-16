@@ -1,7 +1,7 @@
 # StrataPlayer
 
 <div align="center">
-  <img src="public/logo.png" alt="StrataPlayer Logo" width="128" />
+  <img src="https://dev-ashishranjan.github.io/StrataPlayer/logo.png" alt="StrataPlayer Logo" width="128" />
   
   <p align="center">
     <strong>A robust, secure, and production-grade video player built for the modern web.</strong>
