@@ -9,7 +9,8 @@ export const Toggle = ({ label, checked, onChange, icon }: any) => (
     </div>
     <button
       onClick={() => onChange(!checked)}
-      className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-indigo-500 ${checked ? 'bg-indigo-600' : 'bg-zinc-700'}`}
+      className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${checked ? 'bg-[var(--accent)]' : 'bg-zinc-700'}`}
+      style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
     >
       <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
@@ -31,13 +32,14 @@ export const Slider = ({ label, value, min, max, step, onChange, formatValue, ic
         min={min} max={max} step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 strata-range-input"
         style={{
-          background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(value - min) / (max - min) * 100}%, #3f3f46 ${(value - min) / (max - min) * 100}%, #3f3f46 100%)`
-        }}
+          background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${(value - min) / (max - min) * 100}%, #3f3f46 ${(value - min) / (max - min) * 100}%, #3f3f46 100%)`,
+          '--tw-ring-color': 'var(--accent)'
+        } as React.CSSProperties}
       />
       <style>{`
-                input[type=range]::-webkit-slider-thumb {
+                .strata-range-input::-webkit-slider-thumb {
                     -webkit-appearance: none;
                     height: 14px;
                     width: 14px;
@@ -47,7 +49,7 @@ export const Slider = ({ label, value, min, max, step, onChange, formatValue, ic
                     box-shadow: 0 1px 3px rgba(0,0,0,0.5);
                     transition: transform 0.1s;
                 }
-                input[type=range]::-webkit-slider-thumb:hover {
+                .strata-range-input::-webkit-slider-thumb:hover {
                     transform: scale(1.1);
                 }
             `}</style>
@@ -65,7 +67,8 @@ export const Select = ({ label, value, options, onChange, icon }: any) => (
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none hover:bg-zinc-700 transition-colors cursor-pointer"
+        className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-2 appearance-none hover:bg-zinc-700 transition-colors cursor-pointer"
+        style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
       >
         {options.map((opt: any) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -80,7 +83,7 @@ export const Select = ({ label, value, options, onChange, icon }: any) => (
 
 export const SettingsGroup = ({ title, children }: any) => (
   <div className="py-2">
-    {title && <h4 className="px-3 text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1 mt-2">{title}</h4>}
+    {title && <h4 className="px-3 text-[10px] font-bold text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{title}</h4>}
     <div className="space-y-0.5">
       {children}
     </div>

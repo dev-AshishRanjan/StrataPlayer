@@ -8,11 +8,12 @@ import { NotificationContainer } from './components/NotificationContainer';
 import { SubtitleOverlay } from './components/SubtitleOverlay';
 import { Menu, MenuItem, MenuHeader, MenuDivider } from './components/Menu';
 import { SubtitleMenu } from './components/SubtitleMenu';
+import { SettingsGroup } from './components/SettingsPrimitives';
 import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, PipIcon,
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon,
-    LoaderIcon, CastIcon, UsersIcon
+    LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon
 } from './Icons';
 
 declare module 'react' {
@@ -33,6 +34,15 @@ interface StrataPlayerProps {
     textTracks?: TextTrackConfig[];
 }
 
+const THEME_COLORS = [
+    { label: 'Strata', value: '#6366f1' },
+    { label: 'Emerald', value: '#10b981' },
+    { label: 'Rose', value: '#f43f5e' },
+    { label: 'Amber', value: '#f59e0b' },
+    { label: 'Sky', value: '#0ea5e9' },
+    { label: 'Violet', value: '#8b5cf6' },
+];
+
 export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: StrataPlayerProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
@@ -48,7 +58,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party'>('main');
+    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance'>('main');
 
     // Transition States
     const settingsTransition = useTransition(settingsOpen, 200);
@@ -245,6 +255,24 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     // ~120px gives room for controls (bottom) and some margin (top)
     const menuMaxHeight = Math.max(100, playerHeight - 120);
 
+    // Icon Size Logic
+    const getIconClass = () => {
+        switch (state.iconSize) {
+            case 'small': return 'w-4 h-4';
+            case 'large': return 'w-6 h-6';
+            default: return 'w-5 h-5';
+        }
+    }
+    const getButtonClass = () => {
+        switch (state.iconSize) {
+            case 'small': return 'p-1.5';
+            case 'large': return 'p-2.5';
+            default: return 'p-2';
+        }
+    }
+    const iconClass = getIconClass();
+    const btnClass = getButtonClass();
+
     return (
         <div
             ref={containerRef}
@@ -254,8 +282,9 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
             tabIndex={0}
             role="region"
             aria-label="Video Player"
+            style={{ '--accent': state.themeColor } as React.CSSProperties}
         >
-            {!player && <div className="absolute inset-0 flex items-center justify-center bg-zinc-950 z-50"><LoaderIcon className="w-10 h-10 text-indigo-500 animate-spin" /></div>}
+            {!player && <div className="absolute inset-0 flex items-center justify-center bg-zinc-950 z-50"><LoaderIcon className="w-10 h-10 text-[var(--accent)] animate-spin" /></div>}
             {player && (
                 <>
                     <NotificationContainer notifications={state.notifications} />
@@ -278,13 +307,13 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                             </div>
                         </div>
                     )}
-                    {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-indigo-500 animate-spin drop-shadow-lg" /></div>}
-                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.video.src, textTracks)} className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-full hover:bg-indigo-500 transition-colors mt-4 shadow-lg hover:shadow-indigo-500/20">Try Again</button></div></div>}
+                    {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
+                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.video.src, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
                     {((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering ? (
                         <div className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}>
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
                                 <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"><Replay10Icon className="w-6 h-6" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className="group relative flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 hover:bg-indigo-600 border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md">{state.isPlaying ? <PauseIcon className="w-8 h-8 md:w-9 md:h-9 text-white fill-current" /> : <PlayIcon className="w-8 h-8 md:w-9 md:h-9 text-white ml-1 fill-current" />}</button>
+                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className="group relative flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md">{state.isPlaying ? <PauseIcon className="w-8 h-8 md:w-9 md:h-9 text-white fill-current" /> : <PlayIcon className="w-8 h-8 md:w-9 md:h-9 text-white ml-1 fill-current" />}</button>
                                 <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('forward'); }} className="group flex items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm"><Forward10Icon className="w-6 h-6" /></button>
                             </div>
                         </div>
@@ -292,15 +321,15 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                     <div className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); } e.stopPropagation(); }}>
                         <div ref={progressBarRef} className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center" onMouseMove={handleProgressMove} onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }} onMouseDown={handleSeekStart} onTouchStart={handleSeekStart}>
                             {hoverTime !== null && (<div className="absolute bottom-full mb-4 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px` }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums mt-2">{formatTime(hoverTime)}</div></div>)}
-                            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden relative backdrop-blur-sm">{state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}<div className="absolute left-0 top-0 bottom-0 bg-indigo-500" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} /></div>
+                            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden relative backdrop-blur-sm">{state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}<div className="absolute left-0 top-0 bottom-0 bg-[var(--accent)]" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} /></div>
                             <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-md scale-0 group-hover/slider:scale-100 transition-transform duration-100 z-10" style={{ left: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} />
                         </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <button onClick={() => player.togglePlay()} className="text-zinc-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10 focus:outline-none">{state.isPlaying ? <PauseIcon className="w-5 h-5 fill-current" /> : <PlayIcon className="w-5 h-5 fill-current" />}</button>
+                                <button onClick={() => player.togglePlay()} className={`text-zinc-300 hover:text-white transition-colors rounded-lg hover:bg-white/10 focus:outline-none ${btnClass}`}>{state.isPlaying ? <PauseIcon className={`${iconClass} fill-current`} /> : <PlayIcon className={`${iconClass} fill-current`} />}</button>
 
                                 <div className="flex items-center gap-2 group/vol relative" onMouseEnter={() => setIsVolumeHovered(true)} onMouseLeave={() => setIsVolumeHovered(false)}>
-                                    <button onClick={() => player.toggleMute()} className="text-zinc-300 hover:text-white p-2 rounded-lg hover:bg-white/10 focus:outline-none"><VolIcon className="w-5 h-5" /></button>
+                                    <button onClick={() => player.toggleMute()} className={`text-zinc-300 hover:text-white rounded-lg hover:bg-white/10 focus:outline-none ${btnClass}`}><VolIcon className={iconClass} /></button>
                                     <div className={`relative h-8 flex items-center transition-all duration-300 ease-out overflow-hidden ${isVolumeHovered || isVolumeScrubbing ? 'w-28 opacity-100 ml-1' : 'w-0 opacity-0'}`}>
                                         <div ref={volumeBarRef} className="relative w-full h-full flex items-center cursor-pointer px-2" onMouseDown={handleVolumeStart} onTouchStart={handleVolumeStart}>
                                             <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
@@ -322,18 +351,95 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 <div className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className="p-2 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"><google-cast-launcher></google-cast-launcher></div>
+                                <div className={`rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors ${btnClass}`}><google-cast-launcher></google-cast-launcher></div>
                                 <div className="relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`p-2 rounded-lg transition-colors focus:outline-none ${subtitleMenuOpen ? 'text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SubtitleIcon className="w-5 h-5" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`rounded-lg transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SubtitleIcon className={iconClass} /></button>
                                     {subtitleTransition.isMounted && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'} />)}
                                 </div>
-                                <button onClick={() => player.togglePip()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors hidden sm:block focus:outline-none"><PipIcon className="w-5 h-5" /></button>
-                                <button onClick={() => player.download()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors hidden sm:block focus:outline-none"><DownloadIcon className="w-5 h-5" /></button>
+                                <button onClick={() => player.togglePip()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors hidden sm:block focus:outline-none ${btnClass}`}><PipIcon className={iconClass} /></button>
+                                <button onClick={() => player.download()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors hidden sm:block focus:outline-none ${btnClass}`}><DownloadIcon className={iconClass} /></button>
                                 <div className="relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`p-2 rounded-lg transition-all duration-300 focus:outline-none ${settingsOpen ? 'rotate-90 text-indigo-400 bg-indigo-500/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SettingsIcon className="w-5 h-5" /></button>
-                                    {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}><div className="w-full">{activeMenu === 'main' && (<div className="animate-in slide-in-from-left-4 fade-in duration-200"><div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg"><span>Settings</span></div><MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu /><MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu /><MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu /><MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu /><MenuDivider /><MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu /><MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} /></div>)}{['speed', 'quality', 'audio', 'boost', 'party'].includes(activeMenu) && (<div className="animate-in slide-in-from-right-4 fade-in duration-200">{activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}{activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}{activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}{activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}{activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-xs">Create Room</a></div></>)}</div>)}</div></Menu>)}
+                                    <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`rounded-lg transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SettingsIcon className={iconClass} /></button>
+                                    {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}><div className="w-full">
+
+                                        {activeMenu === 'main' && (
+                                            <div className="animate-in slide-in-from-left-4 fade-in duration-200">
+                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg"><span>Settings</span></div>
+                                                <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
+                                                <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
+                                                <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
+                                                <MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
+                                                <MenuDivider />
+                                                <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
+                                                <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} />
+                                                <MenuDivider />
+                                                <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
+                                            </div>
+                                        )}
+
+                                        {['speed', 'quality', 'audio', 'boost', 'party', 'appearance'].includes(activeMenu) && (
+                                            <div className="animate-in slide-in-from-right-4 fade-in duration-200">
+                                                {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}
+                                                {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}
+                                                {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}
+                                                {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}
+                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium rounded-lg transition-opacity text-xs">Create Room</a></div></>)}
+                                                {activeMenu === 'appearance' && (
+                                                    <>
+                                                        <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
+                                                        <div className="pb-1">
+                                                            <SettingsGroup title="Icon Size">
+                                                                <div className="grid grid-cols-3 gap-1 px-3">
+                                                                    {(['small', 'medium', 'large'] as const).map(s => (
+                                                                        <button
+                                                                            key={s}
+                                                                            onClick={() => player.setAppearance({ iconSize: s })}
+                                                                            className={`py-1.5 text-xs font-medium rounded-md transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`}
+                                                                        >
+                                                                            {s.charAt(0).toUpperCase() + s.slice(1)}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </SettingsGroup>
+
+                                                            <SettingsGroup title="Theme Color">
+                                                                <div className="grid grid-cols-6 gap-2 px-3">
+                                                                    {THEME_COLORS.map(c => (
+                                                                        <button
+                                                                            key={c.value}
+                                                                            title={c.label}
+                                                                            onClick={() => player.setAppearance({ themeColor: c.value })}
+                                                                            className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`}
+                                                                            style={{ backgroundColor: c.value }}
+                                                                        >
+                                                                            {state.themeColor === c.value && <CheckIcon className="w-3 h-3 text-white mx-auto stroke-[3]" />}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="px-3 pt-4">
+                                                                    <div className="flex items-center gap-3 bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors group">
+                                                                        <div className="relative w-6 h-6 rounded-full overflow-hidden ring-1 ring-white/20">
+                                                                            <input
+                                                                                type="color"
+                                                                                value={state.themeColor}
+                                                                                onChange={(e) => player.setAppearance({ themeColor: e.target.value })}
+                                                                                className="absolute inset-[-4px] w-[150%] h-[150%] cursor-pointer p-0 border-0"
+                                                                            />
+                                                                        </div>
+                                                                        <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-200">Custom Color</span>
+                                                                        <span className="text-[10px] font-mono text-zinc-500 ml-auto uppercase">{state.themeColor}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </SettingsGroup>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+
+                                    </div></Menu>)}
                                 </div>
-                                <button onClick={() => player.toggleFullscreen()} className="text-zinc-300 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-transform hover:scale-110 focus:outline-none">{state.isFullscreen ? <MinimizeIcon className="w-5 h-5" /> : <MaximizeIcon className="w-5 h-5" />}</button>
+                                <button onClick={() => player.toggleFullscreen()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>
                             </div>
                         </div>
                     </div>

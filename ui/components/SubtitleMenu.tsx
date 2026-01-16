@@ -90,7 +90,7 @@ export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, set
                       >
                         <MinusIcon className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 bg-zinc-900 border border-white/5 rounded-lg h-8 flex items-center justify-center text-xs font-mono font-medium text-indigo-400">
+                      <div className="flex-1 bg-zinc-900 border border-white/5 rounded-lg h-8 flex items-center justify-center text-xs font-mono font-medium text-[var(--accent)]">
                         {offset > 0 ? '+' : ''}{offset?.toFixed(1) || '0.0'}s
                       </div>
                       <button
@@ -132,8 +132,8 @@ export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, set
                         <button
                           key={c}
                           onClick={() => onSettingsChange({ textColor: c })}
-                          className={`w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110 ${settings.textColor === c ? 'ring-2 ring-indigo-500 scale-110' : ''}`}
-                          style={{ backgroundColor: c }}
+                          className={`w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110 ${settings.textColor === c ? 'ring-2 scale-110' : ''}`}
+                          style={{ backgroundColor: c, '--tw-ring-color': 'var(--accent)' } as any}
                         />
                       ))}
                       <div className="w-px h-6 bg-white/10 mx-1"></div>

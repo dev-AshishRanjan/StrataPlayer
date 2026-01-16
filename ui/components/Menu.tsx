@@ -26,11 +26,11 @@ export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: an
   <button onClick={onClick} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors text-left text-zinc-200 active:bg-white/5 focus:outline-none focus:bg-white/10 group rounded-lg overflow-hidden my-0.5">
     <div className="flex items-center gap-3 overflow-hidden">
       {icon && <span className="text-zinc-400 shrink-0 group-hover:text-zinc-300 transition-colors">{icon}</span>}
-      <span className={`font-medium truncate text-sm ${active ? 'text-indigo-400' : ''}`} title={label}>{label}</span>
+      <span className={`font-medium truncate text-sm ${active ? 'text-[var(--accent)]' : ''}`} title={label}>{label}</span>
     </div>
     <div className="flex items-center gap-2 text-zinc-400 shrink-0">
       {value && <span className="text-xs font-medium truncate max-w-[60px]" title={value}>{value}</span>}
-      {active && <CheckIcon className="w-4 h-4 text-indigo-500 shrink-0" />}
+      {active && <CheckIcon className="w-4 h-4 text-[var(--accent)] shrink-0" />}
       {hasSubmenu && <span className="text-xs group-hover:translate-x-0.5 transition-transform text-zinc-500 shrink-0">›</span>}
     </div>
   </button>

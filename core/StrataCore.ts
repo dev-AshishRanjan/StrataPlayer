@@ -61,6 +61,9 @@ export interface PlayerState {
   activeCues: string[]; // For custom rendering
   viewMode: 'normal' | 'theater' | 'pip';
   notifications: Notification[];
+  // Appearance
+  iconSize: 'small' | 'medium' | 'large';
+  themeColor: string;
 }
 
 const STORAGE_KEY = 'strata-settings-v3';
@@ -98,7 +101,9 @@ export const INITIAL_STATE: PlayerState = {
   subtitleSettings: { ...DEFAULT_SUBTITLE_SETTINGS, ...(saved.subtitleSettings || {}) },
   activeCues: [],
   viewMode: 'normal',
-  notifications: []
+  notifications: [],
+  iconSize: saved.iconSize || 'medium',
+  themeColor: saved.themeColor || '#6366f1',
 };
 
 export interface IPlugin {
@@ -165,6 +170,8 @@ export class StrataCore {
         isMuted: state.isMuted,
         playbackRate: state.playbackRate,
         subtitleSettings: state.subtitleSettings,
+        iconSize: state.iconSize,
+        themeColor: state.themeColor
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     });
@@ -655,6 +662,13 @@ export class StrataCore {
   removeNotification(id: string) {
     const current = this.store.get().notifications;
     this.store.setState({ notifications: current.filter(n => n.id !== id) });
+  }
+
+  setAppearance(settings: { iconSize?: 'small' | 'medium' | 'large', themeColor?: string }) {
+    this.store.setState(prev => ({
+      ...prev,
+      ...settings
+    }));
   }
 
   destroy() {

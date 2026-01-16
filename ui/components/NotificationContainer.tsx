@@ -15,12 +15,12 @@ export const NotificationContainer = ({ notifications }: { notifications: Player
                         ${n.type === 'warning' ? 'border-amber-500/50 text-amber-100' : ''}
                     `}
         >
-          {n.type === 'loading' && <LoaderIcon className="w-4 h-4 animate-spin text-indigo-400" />}
+          {n.type === 'loading' && <LoaderIcon className="w-4 h-4 animate-spin text-[var(--accent)]" />}
           <div className="flex flex-col gap-1 w-full">
             <span>{n.message}</span>
             {typeof n.progress === 'number' && (
               <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${n.progress}%` }}></div>
+                <div className="h-full bg-[var(--accent)] transition-all duration-300" style={{ width: `${n.progress}%` }}></div>
               </div>
             )}
           </div>
