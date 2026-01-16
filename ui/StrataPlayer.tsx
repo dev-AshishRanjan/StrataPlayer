@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react';
-import { StrataCore, PlayerState, INITIAL_STATE, TextTrackConfig, SubtitleSettings } from '../core/StrataCore';
+import { StrataCore, PlayerState, INITIAL_STATE, TextTrackConfig, SubtitleSettings, PlayerTheme } from '../core/StrataCore';
 import { HlsPlugin } from '../plugins/HlsPlugin';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
@@ -13,7 +13,8 @@ import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, PipIcon,
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon,
-    LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon
+    LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
+    CustomizeIcon
 } from './Icons';
 
 declare module 'react' {
@@ -41,6 +42,13 @@ const THEME_COLORS = [
     { label: 'Amber', value: '#f59e0b' },
     { label: 'Sky', value: '#0ea5e9' },
     { label: 'Violet', value: '#8b5cf6' },
+];
+
+const THEMES: { label: string, value: PlayerTheme }[] = [
+    { label: 'Default', value: 'default' },
+    { label: 'Pixel', value: 'pixel' },
+    { label: 'Game', value: 'game' },
+    { label: 'Hacker', value: 'hacker' },
 ];
 
 export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: StrataPlayerProps) => {
@@ -276,14 +284,89 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
     return (
         <div
             ref={containerRef}
-            className="group relative w-full h-full bg-black overflow-hidden select-none font-sans outline-none touch-none rounded-xl text-zinc-100"
+            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none touch-none rounded-[var(--radius)] text-zinc-100"
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen) setShowControls(false); }}
             tabIndex={0}
             role="region"
             aria-label="Video Player"
+            data-theme={state.theme}
             style={{ '--accent': state.themeColor } as React.CSSProperties}
         >
+            <style>{`
+                [data-theme="default"] {
+                    --radius: 0.75rem;
+                    --radius-lg: 0.75rem;
+                    --radius-sm: 0.375rem;
+                    --radius-full: 9999px;
+                    --font-main: "Inter", sans-serif;
+                    --border-width: 0px;
+                    --bg-panel: rgba(9, 9, 11, 0.95);
+                }
+                [data-theme="pixel"] {
+                    --radius: 0px;
+                    --radius-lg: 0px;
+                    --radius-sm: 0px;
+                    --radius-full: 0px;
+                    --font-main: "Press Start 2P", cursive;
+                    --border-width: 2px;
+                    --bg-panel: #000000;
+                    image-rendering: pixelated;
+                }
+                [data-theme="game"] {
+                    --radius: 4px;
+                    --radius-lg: 6px;
+                    --radius-sm: 2px;
+                    --radius-full: 4px;
+                    --font-main: "Cinzel", serif;
+                    --border-width: 1px;
+                    --bg-panel: #0a0a0a;
+                }
+                [data-theme="hacker"] {
+                    --radius: 0px;
+                    --radius-lg: 0px;
+                    --radius-sm: 0px;
+                    --radius-full: 0px;
+                    --font-main: "JetBrains Mono", monospace;
+                    --border-width: 1px;
+                    --bg-panel: #000000;
+                    text-shadow: 0 0 5px var(--accent);
+                }
+                
+                /* Specific Theme Overrides */
+                [data-theme="pixel"] .strata-control-btn {
+                    border: 2px solid white;
+                    background: black;
+                }
+                [data-theme="pixel"] .strata-control-btn:hover {
+                    background: white;
+                    color: black;
+                }
+                [data-theme="pixel"] .strata-range-input::-webkit-slider-thumb {
+                    border-radius: 0 !important;
+                    height: 16px !important;
+                    width: 16px !important;
+                    box-shadow: none !important;
+                }
+                
+                [data-theme="hacker"] .strata-scanlines {
+                    background: linear-gradient(
+                        to bottom,
+                        rgba(255,255,255,0),
+                        rgba(255,255,255,0) 50%,
+                        rgba(0,0,0,0.2) 50%,
+                        rgba(0,0,0,0.2)
+                    );
+                    background-size: 100% 4px;
+                    position: absolute;
+                    inset: 0;
+                    pointer-events: none;
+                    z-index: 40;
+                }
+            `}</style>
+
+            {state.theme === 'hacker' && <div className="strata-scanlines" />}
+
             {!player && <div className="absolute inset-0 flex items-center justify-center bg-zinc-950 z-50"><LoaderIcon className="w-10 h-10 text-[var(--accent)] animate-spin" /></div>}
             {player && (
                 <>
@@ -319,23 +402,43 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                         </div>
                     ) : null}
                     <div className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); } e.stopPropagation(); }}>
-                        <div ref={progressBarRef} className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center" onMouseMove={handleProgressMove} onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }} onMouseDown={handleSeekStart} onTouchStart={handleSeekStart}>
-                            {hoverTime !== null && (<div className="absolute bottom-full mb-4 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px` }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums mt-2">{formatTime(hoverTime)}</div></div>)}
-                            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden relative backdrop-blur-sm">{state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}<div className="absolute left-0 top-0 bottom-0 bg-[var(--accent)]" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} /></div>
-                            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-md scale-0 group-hover/slider:scale-100 transition-transform duration-100 z-10" style={{ left: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} />
+                        <div
+                            ref={progressBarRef}
+                            className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center"
+                            onMouseMove={handleProgressMove}
+                            onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }}
+                            onMouseDown={handleSeekStart}
+                            onTouchStart={handleSeekStart}
+                        >
+                            {hoverTime !== null && (<div className="absolute bottom-full mb-4 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px`, borderRadius: 'var(--radius)' }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="bg-white text-black px-2 py-0.5 rounded text-[11px] font-bold font-mono shadow-lg tabular-nums mt-2">{formatTime(hoverTime)}</div></div>)}
+
+                            {/* Track */}
+                            <div className="w-full h-1 bg-white/20 overflow-hidden relative backdrop-blur-sm border-[length:var(--border-width)] border-white/10" style={{ borderRadius: 'var(--radius-full)' }}>
+                                {state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}
+                                <div className="absolute left-0 top-0 bottom-0 bg-[var(--accent)]" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} />
+                            </div>
+
+                            {/* Thumb */}
+                            <div
+                                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white shadow-md scale-0 group-hover/slider:scale-100 transition-transform duration-100 z-10"
+                                style={{
+                                    left: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%`,
+                                    borderRadius: 'var(--radius-full)'
+                                }}
+                            />
                         </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <button onClick={() => player.togglePlay()} className={`text-zinc-300 hover:text-white transition-colors rounded-lg hover:bg-white/10 focus:outline-none ${btnClass}`}>{state.isPlaying ? <PauseIcon className={`${iconClass} fill-current`} /> : <PlayIcon className={`${iconClass} fill-current`} />}</button>
+                                <button onClick={() => player.togglePlay()} className={`strata-control-btn text-zinc-300 hover:text-white transition-colors hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isPlaying ? <PauseIcon className={`${iconClass} fill-current`} /> : <PlayIcon className={`${iconClass} fill-current`} />}</button>
 
                                 <div className="flex items-center gap-2 group/vol relative" onMouseEnter={() => setIsVolumeHovered(true)} onMouseLeave={() => setIsVolumeHovered(false)}>
-                                    <button onClick={() => player.toggleMute()} className={`text-zinc-300 hover:text-white rounded-lg hover:bg-white/10 focus:outline-none ${btnClass}`}><VolIcon className={iconClass} /></button>
+                                    <button onClick={() => player.toggleMute()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><VolIcon className={iconClass} /></button>
                                     <div className={`relative h-8 flex items-center transition-all duration-300 ease-out overflow-hidden ${isVolumeHovered || isVolumeScrubbing ? 'w-28 opacity-100 ml-1' : 'w-0 opacity-0'}`}>
                                         <div ref={volumeBarRef} className="relative w-full h-full flex items-center cursor-pointer px-2" onMouseDown={handleVolumeStart} onTouchStart={handleVolumeStart}>
-                                            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
-                                                <div className="h-full bg-white rounded-full" style={{ width: `${(state.isMuted ? 0 : state.volume) * 100}%` }}></div>
+                                            <div className="w-full h-1 bg-white/20 overflow-hidden" style={{ borderRadius: 'var(--radius-full)' }}>
+                                                <div className="h-full bg-white" style={{ width: `${(state.isMuted ? 0 : state.volume) * 100}%`, borderRadius: 'var(--radius-full)' }}></div>
                                             </div>
-                                            <div className="absolute h-3 w-3 bg-white rounded-full shadow-md top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${(state.isMuted ? 0 : state.volume) * 100}% * 0.85 + 4px)` }} />
+                                            <div className="absolute h-3 w-3 bg-white shadow-md top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${(state.isMuted ? 0 : state.volume) * 100}% * 0.85 + 4px)`, borderRadius: 'var(--radius-full)' }} />
                                         </div>
                                     </div>
                                     {(isVolumeHovered || isVolumeScrubbing) && (
@@ -351,20 +454,20 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                 <div className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className={`rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors ${btnClass}`}><google-cast-launcher></google-cast-launcher></div>
+                                <div className={`strata-control-btn hover:bg-white/10 flex items-center justify-center transition-colors ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><google-cast-launcher></google-cast-launcher></div>
                                 <div className="relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`rounded-lg transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SubtitleIcon className={iconClass} /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
                                     {subtitleTransition.isMounted && (<SubtitleMenu tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player.setSubtitle(idx)} onUpload={(file: File) => player.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)} settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player.updateSubtitleSettings(s)} onReset={() => player.resetSubtitleSettings()} offset={state.subtitleOffset} maxHeight={menuMaxHeight} animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'} />)}
                                 </div>
-                                <button onClick={() => player.togglePip()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors hidden sm:block focus:outline-none ${btnClass}`}><PipIcon className={iconClass} /></button>
-                                <button onClick={() => player.download()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors hidden sm:block focus:outline-none ${btnClass}`}><DownloadIcon className={iconClass} /></button>
+                                <button onClick={() => player.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>
+                                <button onClick={() => player.download()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>
                                 <div className="relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`rounded-lg transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`}><SettingsIcon className={iconClass} /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
                                     {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}><div className="w-full">
 
                                         {activeMenu === 'main' && (
                                             <div className="animate-in slide-in-from-left-4 fade-in duration-200">
-                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg"><span>Settings</span></div>
+                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
                                                 <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
                                                 <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
                                                 <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
@@ -383,18 +486,34 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                 {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}
                                                 {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}
                                                 {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}
-                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium rounded-lg transition-opacity text-xs">Create Room</a></div></>)}
+                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(src)}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
                                                 {activeMenu === 'appearance' && (
                                                     <>
                                                         <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
                                                         <div className="pb-1">
+                                                            <SettingsGroup title="Theme">
+                                                                <div className="grid grid-cols-2 gap-2 px-3">
+                                                                    {THEMES.map(theme => (
+                                                                        <button
+                                                                            key={theme.value}
+                                                                            onClick={() => player.setAppearance({ theme: theme.value })}
+                                                                            className={`py-2 text-xs font-bold uppercase tracking-wide transition-colors border-[length:var(--border-width)] border-white/10 ${state.theme === theme.value ? 'bg-[var(--accent)] text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}
+                                                                            style={{ borderRadius: 'var(--radius)' }}
+                                                                        >
+                                                                            {theme.label}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </SettingsGroup>
+
                                                             <SettingsGroup title="Icon Size">
                                                                 <div className="grid grid-cols-3 gap-1 px-3">
                                                                     {(['small', 'medium', 'large'] as const).map(s => (
                                                                         <button
                                                                             key={s}
                                                                             onClick={() => player.setAppearance({ iconSize: s })}
-                                                                            className={`py-1.5 text-xs font-medium rounded-md transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`}
+                                                                            className={`py-1.5 text-xs font-medium transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`}
+                                                                            style={{ borderRadius: 'var(--radius)' }}
                                                                         >
                                                                             {s.charAt(0).toUpperCase() + s.slice(1)}
                                                                         </button>
@@ -409,16 +528,16 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
                                                                             key={c.value}
                                                                             title={c.label}
                                                                             onClick={() => player.setAppearance({ themeColor: c.value })}
-                                                                            className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`}
-                                                                            style={{ backgroundColor: c.value }}
+                                                                            className={`w-6 h-6 transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`}
+                                                                            style={{ backgroundColor: c.value, borderRadius: 'var(--radius-full)' }}
                                                                         >
                                                                             {state.themeColor === c.value && <CheckIcon className="w-3 h-3 text-white mx-auto stroke-[3]" />}
                                                                         </button>
                                                                     ))}
                                                                 </div>
                                                                 <div className="px-3 pt-4">
-                                                                    <div className="flex items-center gap-3 bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors group">
-                                                                        <div className="relative w-6 h-6 rounded-full overflow-hidden ring-1 ring-white/20">
+                                                                    <div className="flex items-center gap-3 bg-white/5 p-2 hover:bg-white/10 transition-colors group" style={{ borderRadius: 'var(--radius)' }}>
+                                                                        <div className="relative w-6 h-6 overflow-hidden ring-1 ring-white/20" style={{ borderRadius: 'var(--radius-full)' }}>
                                                                             <input
                                                                                 type="color"
                                                                                 value={state.themeColor}
@@ -439,7 +558,7 @@ export const StrataPlayer = ({ src, poster, autoPlay, thumbnails, textTracks }: 
 
                                     </div></Menu>)}
                                 </div>
-                                <button onClick={() => player.toggleFullscreen()} className={`text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>
+                                <button onClick={() => player.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>
                             </div>
                         </div>
                     </div>

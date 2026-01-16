@@ -37,6 +37,8 @@ export const DEFAULT_SUBTITLE_SETTINGS: SubtitleSettings = {
   verticalOffset: 40,
 };
 
+export type PlayerTheme = 'default' | 'pixel' | 'game' | 'hacker';
+
 export interface PlayerState {
   isPlaying: boolean;
   isBuffering: boolean;
@@ -64,6 +66,7 @@ export interface PlayerState {
   // Appearance
   iconSize: 'small' | 'medium' | 'large';
   themeColor: string;
+  theme: PlayerTheme;
 }
 
 const STORAGE_KEY = 'strata-settings-v3';
@@ -104,6 +107,7 @@ export const INITIAL_STATE: PlayerState = {
   notifications: [],
   iconSize: saved.iconSize || 'medium',
   themeColor: saved.themeColor || '#6366f1',
+  theme: saved.theme || 'default',
 };
 
 export interface IPlugin {
@@ -171,7 +175,8 @@ export class StrataCore {
         playbackRate: state.playbackRate,
         subtitleSettings: state.subtitleSettings,
         iconSize: state.iconSize,
-        themeColor: state.themeColor
+        themeColor: state.themeColor,
+        theme: state.theme
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     });
@@ -664,7 +669,7 @@ export class StrataCore {
     this.store.setState({ notifications: current.filter(n => n.id !== id) });
   }
 
-  setAppearance(settings: { iconSize?: 'small' | 'medium' | 'large', themeColor?: string }) {
+  setAppearance(settings: { iconSize?: 'small' | 'medium' | 'large', themeColor?: string, theme?: PlayerTheme }) {
     this.store.setState(prev => ({
       ...prev,
       ...settings
