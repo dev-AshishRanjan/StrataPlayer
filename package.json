@@ -1,6 +1,6 @@
 {
   "name": "strataplayer",
-  "version": "1.0.12",
+  "version": "1.1.0",
   "description": "A robust, secure, and production-grade video player built for the modern web.",
   "type": "module",
   "main": "./dist/strataplayer.cjs.js",
