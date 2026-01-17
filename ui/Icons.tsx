@@ -40,7 +40,10 @@ import {
   Ratio,
   Expand,
   X,
-  Info
+  Info,
+  Copy,
+  Menu,
+  ChevronRight
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -81,6 +84,9 @@ export const RatioIcon = Ratio;
 export const ExpandIcon = Expand;
 export const CloseIcon = X;
 export const InfoIcon = Info;
+export const CopyIcon = Copy;
+export const MenuIcon = Menu;
+export const ChevronRightIcon = ChevronRight;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (

@@ -5,13 +5,15 @@ import { Link, Route, Switch, useLocation, Router } from 'wouter';
 import { useHashLocation } from "wouter/use-hash-location";
 import { Home } from './pages/Home';
 import { Playground } from './pages/Playground';
+import { Documentation } from './pages/Documentation';
 import { StrataLogo } from './ui/Icons';
 import './demo.css'; // Import global styles (tailwind base)
 import './index.css'; // Import library styles
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
     const [location] = useLocation();
-    const isActive = location === href;
+    // Simple check for active state, handling nested routes roughly by prefix if needed
+    const isActive = location === href || (href !== '/' && location.startsWith(href));
 
     return (
         <Link href={href}>
@@ -37,8 +39,8 @@ const App = () => {
                             </div>
                         </Link>
                         <div className="flex gap-6 text-sm font-medium text-zinc-400">
+                            <NavLink href="/docs">Documentation</NavLink>
                             <NavLink href="/playground">Playground</NavLink>
-                            <a href="https://github.com/dev-AshishRanjan/StrataPlayer#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Documentation</a>
                             <a href="https://github.com/dev-AshishRanjan/StrataPlayer" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
                         </div>
                     </div>
@@ -49,6 +51,7 @@ const App = () => {
                     <Switch>
                         <Route path="/" component={Home} />
                         <Route path="/playground" component={Playground} />
+                        <Route path="/docs/:section?" component={Documentation} />
                         {/* Fallback for 404 */}
                         <Route>
                             <div className="flex flex-col items-center justify-center min-h-[60vh] text-zinc-400">
