@@ -2,6 +2,7 @@
 import { EventBus } from './EventBus';
 import { NanoStore } from './NanoStore';
 import { AudioEngine } from './AudioEngine';
+import React from 'react';
 
 export interface Notification {
   id: string;
@@ -58,6 +59,57 @@ export interface Highlight {
   text: string;
 }
 
+// --- Phase 2: New Interfaces ---
+
+export interface LayerConfig {
+  name?: string;
+  html: string | React.ReactNode;
+  style?: React.CSSProperties;
+  className?: string;
+  // Compatibility aliases
+  click?: () => void;
+  mounted?: (element: HTMLElement) => void;
+}
+
+export interface ContextMenuItem {
+  html: string | React.ReactNode;
+  disabled?: boolean;
+  icon?: string | React.ReactNode;
+  onClick?: (close: () => void) => void;
+  click?: (close: () => void) => void; // Alias
+  showBorder?: boolean; // Separator below
+  checked?: boolean; // Checkbox style
+}
+
+export interface ControlItem {
+  id?: string;
+  position: 'left' | 'right' | 'center';
+  index: number; // Order: 0-100
+  html?: string | React.ReactNode; // Custom content
+  tooltip?: string;
+  onClick?: (core: StrataCore) => void;
+  click?: (core: StrataCore) => void; // Alias
+  className?: string;
+  style?: React.CSSProperties;
+  // Internal use for built-ins
+  isBuiltIn?: boolean;
+  builtInId?: string;
+}
+
+export interface SettingItem {
+  id?: string;
+  html: string | React.ReactNode;
+  icon?: string | React.ReactNode;
+  tooltip?: string;
+  // Toggle Switch Support
+  switch?: boolean;
+  onSwitch?: (item: SettingItem) => boolean | void;
+  // Standard Action Support
+  onClick?: () => void;
+  click?: () => void; // Alias
+  isDefault?: boolean; // Mark as one of the default settings
+}
+
 export interface PlayerState {
   isPlaying: boolean;
   isBuffering: boolean;
@@ -96,6 +148,7 @@ export interface PlayerState {
   flipState: { horizontal: boolean; vertical: boolean };
   aspectRatio: string; // 'default', '16:9', '4:3'
   isAutoSized: boolean; // tracks if autoSize (cover) is currently applied
+  isLooping: boolean; // Track loop state reactively
 }
 
 export interface StrataConfig {
@@ -139,6 +192,12 @@ export interface StrataConfig {
   fastForward?: boolean; // Long press
   autoOrientation?: boolean; // Mobile landscape lock
 
+  // Phase 2: Customization
+  layers?: LayerConfig[];
+  contextmenu?: ContextMenuItem[];
+  controls?: ControlItem[];
+  settings?: SettingItem[]; // Append to main menu
+
   // System
   useSSR?: boolean;
   disablePersistence?: boolean;
@@ -180,7 +239,8 @@ export const DEFAULT_STATE: PlayerState = {
   isLocked: false,
   flipState: { horizontal: false, vertical: false },
   aspectRatio: 'default',
-  isAutoSized: false
+  isAutoSized: false,
+  isLooping: false
 };
 
 // Helper to merge Defaults -> LocalStorage -> Config
@@ -213,7 +273,8 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     subtitleSettings: mergedSubtitleSettings,
     // Config overrides state for these visual modes
     isAutoSized: config.autoSize ?? DEFAULT_STATE.isAutoSized,
-    isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive
+    isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive,
+    isLooping: config.loop ?? saved.isLooping ?? DEFAULT_STATE.isLooping
   };
 };
 
@@ -253,7 +314,6 @@ export class StrataCore {
 
     // Init Config Props to Video
     if (config.playsInline !== false) this.video.playsInline = true;
-    if (config.loop) this.video.loop = true;
 
     this.events = new EventBus();
 
@@ -288,6 +348,8 @@ export class StrataCore {
     this.video.volume = initialState.volume;
     this.video.muted = initialState.isMuted;
     this.video.playbackRate = initialState.playbackRate;
+    this.video.loop = initialState.isLooping; // Apply loop state
+
     if (initialState.audioGain > 1) {
       this.audioEngine.setGain(initialState.audioGain);
     }
@@ -310,7 +372,8 @@ export class StrataCore {
           iconSize: state.iconSize,
           themeColor: state.themeColor,
           theme: state.theme,
-          isLive: state.isLive
+          isLive: state.isLive,
+          isLooping: state.isLooping
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       });
@@ -689,6 +752,12 @@ export class StrataCore {
     this.store.setState((prev) => ({ isLocked: !prev.isLocked }));
   }
 
+  toggleLoop() {
+    this.video.loop = !this.video.loop;
+    this.store.setState({ isLooping: this.video.loop });
+    this.notify({ type: 'info', message: `Loop: ${this.video.loop ? 'On' : 'Off'}`, duration: 1500 });
+  }
+
   setFlip(direction: 'horizontal' | 'vertical') {
     const current = this.store.get().flipState;
     const newState = {
@@ -714,21 +783,6 @@ export class StrataCore {
       return;
     }
 
-    // Basic CSS Aspect Ratio forcing via object-fit contain within specific box?
-    // ArtPlayer approach: Force object-fit fill and calculate dimensions.
-    // Simpler approach for now:
-    // We will rely on CSS object-fit contain, but we can't easily change the container's aspect ratio without affecting layout.
-    // So we will just reset objectFit to contain for safety.
-    // For true aspect ratio forcing, we might need a wrapper, or use object-fit: fill with specific W/H.
-    // Let's implement object-fit: fill + calc() based on container size in UI or resize observer.
-
-    // For this phase, we'll keep it simple: Just object-fit changes for autoSize, but aspect ratio requires more complex DOM manipulation usually.
-    // We will simulate it by manipulating object-fit and maybe max-width/height if possible.
-    // Actually, standard players implement aspect ratio by cropping (cover) or fitting (contain).
-    // If user selects 16:9 on a 4:3 video, they usually want to stretch it (fill) or crop it?
-    // Usually it means "Force video to display as 16:9".
-
-    // Let's use standard object-fit logic for now.
     this.video.style.objectFit = 'contain';
     this.notify({ type: 'info', message: `Aspect Ratio: ${ratio} (CSS support limited)`, duration: 2000 });
   }

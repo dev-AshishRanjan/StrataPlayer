@@ -1,14 +1,28 @@
 
 import React from 'react';
 
-export const Toggle = ({ label, checked, onChange, icon }: any) => (
+// Helper for rendering string/node safely (duplicated from Menu for isolation)
+const RenderContent = ({ content }: { content: string | React.ReactNode }) => {
+  if (typeof content === 'string') {
+    if (content.trim().startsWith('<')) return <span dangerouslySetInnerHTML={{ __html: content }} />;
+    return <span>{content}</span>;
+  }
+  return <>{content}</>;
+};
+
+export const Toggle = ({ label, checked, onChange, icon, tooltip }: any) => (
   <div
     className="flex items-center justify-between py-2.5 px-3 hover:bg-white/5 group transition-colors"
     style={{ borderRadius: 'var(--radius)' }}
   >
     <div className="flex items-center gap-3">
-      {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors">{icon}</span>}
-      <span className="text-sm text-zinc-300 font-medium group-hover:text-white transition-colors">{label}</span>
+      {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors flex items-center justify-center w-4 h-4"><RenderContent content={icon} /></span>}
+      <div className="flex flex-col">
+        <span className="text-sm text-zinc-300 font-medium group-hover:text-white transition-colors flex items-center">
+          <RenderContent content={label} />
+        </span>
+        {tooltip && <span className="text-[10px] text-zinc-500">{tooltip}</span>}
+      </div>
     </div>
     <button
       onClick={() => onChange(!checked)}
@@ -35,7 +49,7 @@ export const Slider = ({ label, value, min, max, step, onChange, formatValue, ic
   >
     <div className="flex justify-between items-center mb-2">
       <div className="flex items-center gap-3">
-        {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors">{icon}</span>}
+        {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors flex items-center justify-center w-4 h-4"><RenderContent content={icon} /></span>}
         <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider group-hover:text-zinc-300 transition-colors">{label}</span>
       </div>
       <span
@@ -83,7 +97,7 @@ export const Select = ({ label, value, options, onChange, icon }: any) => (
     style={{ borderRadius: 'var(--radius)' }}
   >
     <div className="flex items-center gap-3 mb-2">
-      {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors">{icon}</span>}
+      {icon && <span className="text-zinc-500 group-hover:text-zinc-400 transition-colors flex items-center justify-center w-4 h-4"><RenderContent content={icon} /></span>}
       <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider group-hover:text-zinc-300 transition-colors">{label}</span>
     </div>
     <div className="relative">

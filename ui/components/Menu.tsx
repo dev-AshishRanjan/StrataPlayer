@@ -22,6 +22,16 @@ export const Menu = ({ children, onClose, align = 'right', maxHeight, className 
   );
 };
 
+// Helper for rendering string/node safely
+const RenderContent = ({ content, className }: { content: string | React.ReactNode, className?: string }) => {
+  if (typeof content === 'string') {
+    // If it looks like HTML, use dangerous. Otherwise regular text.
+    if (content.trim().startsWith('<')) return <span className={className} dangerouslySetInnerHTML={{ __html: content }} />;
+    return <span className={className}>{content}</span>;
+  }
+  return <span className={className}>{content}</span>;
+};
+
 export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: any) => (
   <button
     onClick={onClick}
@@ -29,8 +39,10 @@ export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: an
     style={{ borderRadius: 'var(--radius)' }}
   >
     <div className="flex items-center gap-3 overflow-hidden">
-      {icon && <span className="text-zinc-400 shrink-0 group-hover:text-zinc-300 transition-colors">{icon}</span>}
-      <span className={`font-medium truncate text-sm ${active ? 'text-[var(--accent)]' : ''}`} title={label}>{label}</span>
+      {icon && <span className="text-zinc-400 shrink-0 group-hover:text-zinc-300 transition-colors flex items-center justify-center w-4 h-4"><RenderContent content={icon} /></span>}
+      <span className={`font-medium truncate text-sm flex items-center ${active ? 'text-[var(--accent)]' : ''}`} title={typeof label === 'string' ? label : undefined}>
+        <RenderContent content={label} />
+      </span>
     </div>
     <div className="flex items-center gap-2 text-zinc-400 shrink-0">
       {value && <span className="text-xs font-medium truncate max-w-[60px]" title={value}>{value}</span>}

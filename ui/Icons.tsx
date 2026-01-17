@@ -38,7 +38,9 @@ import {
   Monitor,
   Zap,
   Ratio,
-  Expand
+  Expand,
+  X,
+  Info
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -77,6 +79,8 @@ export const WebFullscreenIcon = Monitor;
 export const FastForwardIcon = Zap;
 export const RatioIcon = Ratio;
 export const ExpandIcon = Expand;
+export const CloseIcon = X;
+export const InfoIcon = Info;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (
