@@ -33,7 +33,7 @@ const App = () => {
                         <Link href="/">
                             <div className="flex items-center gap-3 cursor-pointer group">
                                 <StrataLogo className="w-9 h-9 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform" />
-                                <span className="font-bold text-xl tracking-tight group-hover:text-white transition-colors">StrataPlayer</span>
+                                <span className="font-bold text-xl tracking-tight group-hover:text-white transition-colors hidden md:block">StrataPlayer</span>
                             </div>
                         </Link>
                         <div className="flex gap-6 text-sm font-medium text-zinc-400">

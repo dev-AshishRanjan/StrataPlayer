@@ -28,6 +28,7 @@ declare module 'react' {
 
 interface StrataPlayerProps extends StrataConfig {
     src?: string; // Optional if sources are provided
+    type?: string; // Optional: Explicitly define type for the src (e.g. 'hls', 'dash')
     sources?: PlayerSource[]; // Array of sources
     poster?: string;
     autoPlay?: boolean;
@@ -53,7 +54,7 @@ const THEMES: { label: string, value: PlayerTheme, color: string }[] = [
 ];
 
 export const StrataPlayer = (props: StrataPlayerProps) => {
-    const { src, sources, poster, autoPlay, thumbnails, textTracks, plugins, ...config } = props;
+    const { src, type, sources, poster, autoPlay, thumbnails, textTracks, plugins, ...config } = props;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
@@ -61,7 +62,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [playerHeight, setPlayerHeight] = useState(0);
 
     // Resolve initial state based on props + defaults + localStorage BEFORE mounting
-    // This prevents layout shift or theme flash on first render
     const initialState = useMemo(() => getResolvedState(config), []);
 
     const state = useSyncExternalStore<PlayerState>(
@@ -84,16 +84,20 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [scrubbingTime, setScrubbingTime] = useState(0);
     const [isVolumeScrubbing, setIsVolumeScrubbing] = useState(false);
     const [isVolumeHovered, setIsVolumeHovered] = useState(false);
+    const [isVolumeLocked, setIsVolumeLocked] = useState(false); // For mobile/touch
+
     const [thumbnailCues, setThumbnailCues] = useState<ThumbnailCue[]>([]);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
     const [hoverPos, setHoverPos] = useState<number>(0);
     const [currentThumbnail, setCurrentThumbnail] = useState<ThumbnailCue | null>(null);
     const [seekAnimation, setSeekAnimation] = useState<{ type: 'forward' | 'rewind', id: number } | null>(null);
     const [skipTrigger, setSkipTrigger] = useState<'forward' | 'rewind' | null>(null);
+
     const clickTimeoutRef = useRef<any>(null);
     const controlsTimeoutRef = useRef<any>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
     const volumeBarRef = useRef<HTMLDivElement>(null);
+    const animationCleanupRef = useRef<any>(null);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -124,7 +128,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     // Reactive Prop Updates
     useEffect(() => {
         if (!player) return;
-        // Update appearance if props change
         const updates: any = {};
         if (config.theme !== undefined && config.theme !== state.theme) updates.theme = config.theme;
         if (config.themeColor !== undefined && config.themeColor !== state.themeColor) updates.themeColor = config.themeColor;
@@ -134,35 +137,24 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             player.setAppearance(updates);
         }
 
-        // Update volume/mute if controlled props change
         if (config.volume !== undefined && Math.abs(config.volume - state.volume) > 0.01) player.setVolume(config.volume);
         if (config.muted !== undefined && config.muted !== state.isMuted) {
             if (config.muted) player.video.muted = true;
             else { player.video.muted = false; }
-            // State update happens via listener
         }
     }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted]);
 
     useEffect(() => {
         if (!player) return;
-
         const tracks = textTracks || [];
-
-        // Priority: Sources Array > Single Src
         if (sources && sources.length > 0) {
             setHasPlayed(false);
             player.setSources(sources, tracks);
         } else if (src) {
             setHasPlayed(false);
-            player.setSources([{ url: src, type: 'auto' }], tracks);
+            player.setSources([{ url: src, type: type || 'auto' }], tracks);
         }
-
-    }, [src, sources, textTracks, player]);
-
-    useEffect(() => {
-        // We handle poster manually to support cover
-        // if (player && poster) player.video.poster = poster;
-    }, [player, poster]);
+    }, [src, type, sources, textTracks, player]);
 
     useEffect(() => {
         if (player && autoPlay) {
@@ -181,6 +173,19 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             parseVTT(thumbnails, player.notify.bind(player)).then(setCues => setThumbnailCues(setCues));
         } else setThumbnailCues([]);
     }, [thumbnails, player]);
+
+    // Safety cleanup for seek animation if onAnimationEnd fails
+    useEffect(() => {
+        if (seekAnimation) {
+            if (animationCleanupRef.current) clearTimeout(animationCleanupRef.current);
+            animationCleanupRef.current = setTimeout(() => {
+                setSeekAnimation(null);
+            }, 600); // slightly longer than 500ms animation
+        }
+        return () => {
+            if (animationCleanupRef.current) clearTimeout(animationCleanupRef.current);
+        };
+    }, [seekAnimation]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -276,8 +281,11 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        // Close menus on outside click
         if (settingsOpen) setSettingsOpen(false);
         if (subtitleMenuOpen) setSubtitleMenuOpen(false);
+        if (isVolumeLocked) setIsVolumeLocked(false);
+
         if (!player) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -298,13 +306,30 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
     };
 
+    const handleVolumeIconClick = (e: React.MouseEvent | React.TouchEvent) => {
+        e.stopPropagation();
+
+        // Robust touch/mobile detection
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const isMobile = window.matchMedia('(hover: none)').matches || isTouch;
+
+        if (isVolumeLocked) {
+            setIsVolumeLocked(false);
+            return;
+        }
+
+        if (isMobile) {
+            setIsVolumeLocked(true);
+        } else {
+            // Desktop default behavior: Mute toggle
+            player?.toggleMute();
+        }
+    };
+
     const VolIcon = state.isMuted || state.volume === 0 ? VolumeMuteIcon : state.volume < 0.5 ? VolumeLowIcon : VolumeHighIcon;
 
-    // Calculate max height for menus based on player height
-    // ~120px gives room for controls (bottom) and some margin (top)
     const menuMaxHeight = Math.max(100, playerHeight - 120);
 
-    // Icon Size Logic
     const getIconClass = () => {
         switch (state.iconSize) {
             case 'small': return 'w-4 h-4';
@@ -314,9 +339,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     }
     const getButtonClass = () => {
         switch (state.iconSize) {
-            case 'small': return 'p-1.5';
-            case 'large': return 'p-2.5';
-            default: return 'p-2';
+            case 'small': return 'p-2 min-w-[32px] min-h-[32px]';
+            case 'large': return 'p-3 min-w-[44px] min-h-[44px]'; // Larger touch targets
+            default: return 'p-2.5 min-w-[36px] min-h-[36px]';
         }
     }
     const iconClass = getIconClass();
@@ -349,17 +374,22 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     }
     const center = getCenterSizes();
 
+    // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open
+    const isControlsVisible = showControls || !state.isPlaying || settingsOpen || subtitleMenuOpen;
+    const isVolumeVisible = isVolumeHovered || isVolumeScrubbing || isVolumeLocked;
+
     return (
         <div
             ref={containerRef}
-            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none touch-none rounded-[var(--radius)] text-zinc-100 strata-player-reset"
+            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none rounded-[var(--radius)] text-zinc-100 strata-player-reset"
+            // touch-action: manipulation improves tap response
+            style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen) setShowControls(false); }}
             tabIndex={0}
             role="region"
             aria-label="Video Player"
             data-theme={state.theme}
-            style={{ '--accent': state.themeColor } as React.CSSProperties}
         >
             <style>{`
                 [data-theme="default"] {
@@ -413,7 +443,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     text-shadow: 0 0 5px var(--accent);
                 }
                 
-                /* Specific Theme Overrides */
                 [data-theme="pixel"] .strata-control-btn {
                     border: 2px solid white;
                     background: black;
@@ -462,7 +491,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     <SubtitleOverlay cues={state.activeCues} settings={state.subtitleSettings} />
                     <div className="absolute inset-0 z-0" onClick={handleContainerClick} aria-hidden="true" />
 
-                    {/* Custom Poster Overlay */}
                     {poster && !hasPlayed && (
                         <div
                             className="absolute inset-0 bg-cover bg-center z-[5] pointer-events-none"
@@ -471,7 +499,11 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     )}
 
                     {seekAnimation && (
-                        <div key={seekAnimation.id} className={`absolute top-0 bottom-0 flex items-center justify-center w-[35%] z-20 bg-white/5 backdrop-blur-[1px] animate-out fade-out duration-500 ${seekAnimation.type === 'rewind' ? 'left-0 rounded-r-[4rem]' : 'right-0 rounded-l-[4rem]'}`} onAnimationEnd={() => setSeekAnimation(null)}>
+                        <div
+                            key={seekAnimation.id}
+                            className={`absolute top-0 bottom-0 flex items-center justify-center w-[35%] z-20 bg-white/5 backdrop-blur-[1px] animate-out fade-out duration-500 fill-mode-forwards ${seekAnimation.type === 'rewind' ? 'left-0 rounded-r-[4rem]' : 'right-0 rounded-l-[4rem]'}`}
+                            onAnimationEnd={() => setSeekAnimation(null)}
+                        >
                             <div className="flex flex-col items-center text-white drop-shadow-lg">
                                 {seekAnimation.type === 'rewind' ? <Replay10Icon className="w-12 h-12 animate-pulse" /> : <Forward10Icon className="w-12 h-12 animate-pulse" />}
                                 <span className="font-bold text-sm mt-2 font-mono">{seekAnimation.type === 'rewind' ? '-10s' : '+10s'}</span>
@@ -480,8 +512,12 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     )}
                     {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
                     {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
+
+                    {/* Center Controls */}
                     {((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering ? (
-                        <div className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+                        <div
+                            className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
+                        >
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
                                 <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
                                 <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all hover:scale-105 active:scale-110 duration-75 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
@@ -489,7 +525,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             </div>
                         </div>
                     ) : null}
-                    <div className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); } e.stopPropagation(); }}>
+
+                    {/* Bottom Control Bar */}
+                    <div
+                        className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+                        onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); setIsVolumeLocked(false); } e.stopPropagation(); }}
+                    >
+                        {/* Progress Bar */}
                         <div
                             ref={progressBarRef}
                             className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center"
@@ -515,13 +557,23 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                 }}
                             />
                         </div>
+
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <button onClick={() => player.togglePlay()} className={`strata-control-btn text-zinc-300 hover:text-white transition-colors hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isPlaying ? <PauseIcon className={`${iconClass} fill-current`} /> : <PlayIcon className={`${iconClass} fill-current`} />}</button>
 
-                                <div className="flex items-center gap-2 group/vol relative" onMouseEnter={() => setIsVolumeHovered(true)} onMouseLeave={() => setIsVolumeHovered(false)}>
-                                    <button onClick={() => player.toggleMute()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><VolIcon className={iconClass} /></button>
-                                    <div className={`relative h-8 flex items-center transition-all duration-300 ease-out overflow-hidden ${isVolumeHovered || isVolumeScrubbing ? 'w-28 opacity-100 ml-1' : 'w-0 opacity-0'}`}>
+                                <div className="flex items-center gap-2 group/vol relative"
+                                    onMouseEnter={() => { if (window.matchMedia('(hover: hover)').matches) setIsVolumeHovered(true); }}
+                                    onMouseLeave={() => { if (window.matchMedia('(hover: hover)').matches) setIsVolumeHovered(false); }}
+                                >
+                                    <button
+                                        onClick={handleVolumeIconClick}
+                                        className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 focus:outline-none ${btnClass}`}
+                                        style={{ borderRadius: 'var(--radius)' }}
+                                    >
+                                        <VolIcon className={iconClass} />
+                                    </button>
+                                    <div className={`relative h-8 flex items-center transition-all duration-300 ease-out overflow-hidden ${isVolumeVisible ? 'w-28 opacity-100 ml-1' : 'w-0 opacity-0'}`}>
                                         <div ref={volumeBarRef} className="relative w-full h-full flex items-center cursor-pointer px-2" onMouseDown={handleVolumeStart} onTouchStart={handleVolumeStart}>
                                             <div className="w-full h-1 bg-white/20 overflow-hidden" style={{ borderRadius: 'var(--radius-full)' }}>
                                                 <div className="h-full bg-white" style={{ width: `${(state.isMuted ? 0 : state.volume) * 100}%`, borderRadius: 'var(--radius-full)' }}></div>
@@ -529,7 +581,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                             <div className="absolute h-3 w-3 bg-white shadow-md top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${(state.isMuted ? 0 : state.volume) * 100}% * 0.85 + 4px)`, borderRadius: 'var(--radius-full)' }} />
                                         </div>
                                     </div>
-                                    {(isVolumeHovered || isVolumeScrubbing) && (
+                                    {isVolumeVisible && (
                                         <div
                                             className="strata-tooltip absolute bottom-full mb-2 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono shadow-lg pointer-events-none whitespace-nowrap z-50 transform -translate-x-1/2"
                                             style={{ left: `calc(52px + ${(state.isMuted ? 0 : state.volume) * 80}px)` }}

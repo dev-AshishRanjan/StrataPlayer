@@ -17,7 +17,10 @@ export const SubtitleMenu = ({ tracks, current, onSelect, onUpload, onClose, set
     <Menu onClose={onClose} align="right" maxHeight={maxHeight} className={animationClass}>
       {view === 'main' && (
         <div className="animate-in slide-in-from-left-4 fade-in duration-200">
-          <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 rounded-lg">
+          <div
+            className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md"
+            style={{ borderRadius: 'var(--radius)' }}
+          >
             <span>Subtitles</span>
           </div>
           <div>

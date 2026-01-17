@@ -570,14 +570,32 @@ export class StrataCore {
     this.events.emit('audio-track-request', index);
   }
 
-  toggleFullscreen() {
+  async toggleFullscreen() {
     if (!this.container) return;
-    if (!document.fullscreenElement) {
-      this.container.requestFullscreen().catch(err => console.error(err));
-      // State update happens in the event listener
-    } else {
-      document.exitFullscreen();
-      // State update happens in the event listener
+    try {
+      if (!document.fullscreenElement) {
+        await this.container.requestFullscreen();
+        // Attempt to lock orientation to landscape on mobile devices
+        if (screen.orientation && 'lock' in screen.orientation) {
+          try {
+            // @ts-ignore - 'lock' type defs might be missing in some setups
+            await screen.orientation.lock('landscape');
+          } catch (e) {
+            // Orientation lock not supported or failed (expected on some devices/browsers)
+            // We fail silently as standard fullscreen is sufficient fallback
+          }
+        }
+      } else {
+        if (screen.orientation && 'unlock' in screen.orientation) {
+          try {
+            // @ts-ignore
+            screen.orientation.unlock();
+          } catch (e) { }
+        }
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error('Fullscreen toggle failed', err);
     }
   }
 

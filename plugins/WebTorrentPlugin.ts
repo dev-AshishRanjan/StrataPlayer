@@ -35,7 +35,7 @@ export class WebTorrentPlugin implements IPlugin {
 
     try {
       // Check if environment is sane before initializing
-      if (typeof process === 'undefined' || !process.version) {
+      if (typeof process === 'undefined' || !(process as any).version) {
         console.warn('[WebTorrentPlugin] Missing process polyfills, attempting to initialize anyway...');
       }
 
