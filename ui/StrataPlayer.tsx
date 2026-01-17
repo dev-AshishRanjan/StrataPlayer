@@ -7,13 +7,14 @@ import { NotificationContainer } from './components/NotificationContainer';
 import { SubtitleOverlay } from './components/SubtitleOverlay';
 import { Menu, MenuItem, MenuHeader, MenuDivider } from './components/Menu';
 import { SubtitleMenu } from './components/SubtitleMenu';
-import { SettingsGroup } from './components/SettingsPrimitives';
+import { SettingsGroup, Toggle } from './components/SettingsPrimitives';
 import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, PipIcon,
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon,
     LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
-    CustomizeIcon
+    CustomizeIcon, CameraIcon, LockIcon, UnlockIcon, WebFullscreenIcon,
+    FastForwardIcon, RatioIcon, ExpandIcon
 } from './Icons';
 
 declare module 'react' {
@@ -31,10 +32,10 @@ interface StrataPlayerProps extends StrataConfig {
     type?: string; // Optional: Explicitly define type for the src (e.g. 'hls', 'dash')
     sources?: PlayerSource[]; // Array of sources
     poster?: string;
-    autoPlay?: boolean;
     thumbnails?: string; // URL to VTT thumbnails
     textTracks?: TextTrackConfig[];
     plugins?: IPlugin[]; // Allow injecting plugins from outside
+    autoPlay?: boolean; // Added prop
 }
 
 const THEME_COLORS = [
@@ -56,6 +57,19 @@ const THEMES: { label: string, value: PlayerTheme, color: string }[] = [
 export const StrataPlayer = (props: StrataPlayerProps) => {
     const { src, type, sources, poster, autoPlay, thumbnails, textTracks, plugins, ...config } = props;
 
+    // Default configs for optionals
+    const useScreenshot = config.screenshot ?? false;
+    const usePip = config.pip ?? true;
+    const useSetting = config.setting ?? true;
+    const useFullscreen = config.fullscreen ?? true;
+    const useFullscreenWeb = config.fullscreenWeb ?? false;
+    const useLock = config.lock ?? false;
+    const useFastForward = config.fastForward ?? true;
+    const useFlip = config.flip ?? true;
+    const useAspectRatio = config.aspectRatio ?? true;
+    const useHotKey = config.hotKey ?? true;
+    const isBackdrop = config.backdrop ?? true;
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
     const [hasPlayed, setHasPlayed] = useState(false);
@@ -73,7 +87,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance' | 'sources'>('main');
+    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance' | 'sources' | 'flip' | 'ratio'>('main');
 
     // Transition States
     const settingsTransition = useTransition(settingsOpen, 200);
@@ -92,6 +106,11 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [currentThumbnail, setCurrentThumbnail] = useState<ThumbnailCue | null>(null);
     const [seekAnimation, setSeekAnimation] = useState<{ type: 'forward' | 'rewind', id: number } | null>(null);
     const [skipTrigger, setSkipTrigger] = useState<'forward' | 'rewind' | null>(null);
+
+    // Fast Forward State
+    const [isFastForwarding, setIsFastForwarding] = useState(false);
+    const fastForwardTimerRef = useRef<any>(null);
+    const originalRateRef = useRef<number>(1);
 
     const clickTimeoutRef = useRef<any>(null);
     const controlsTimeoutRef = useRef<any>(null);
@@ -189,7 +208,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (!player) return;
+            if (!player || !useHotKey) return;
             if (document.activeElement?.tagName === 'INPUT') return;
             switch (e.key.toLowerCase()) {
                 case ' ': case 'k': e.preventDefault(); player.togglePlay(); break;
@@ -203,9 +222,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [player]);
+    }, [player, useHotKey]);
 
     const handleMouseMove = () => {
+        // Even if locked, we want to wake up controls so the lock button becomes visible
         setShowControls(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         if (settingsOpen || subtitleMenuOpen) return;
@@ -220,6 +240,24 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         else if (settingsOpen || subtitleMenuOpen) { setShowControls(true); if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current); }
     }, [settingsOpen, subtitleMenuOpen, state.isPlaying]);
 
+    // --- Fast Forward Logic ---
+    const startFastForward = useCallback(() => {
+        if (!useFastForward || !player || !state.isPlaying || state.isLocked) return;
+        originalRateRef.current = player.video.playbackRate;
+        fastForwardTimerRef.current = setTimeout(() => {
+            player.video.playbackRate = 2;
+            setIsFastForwarding(true);
+        }, 500); // 500ms delay for long press
+    }, [useFastForward, player, state.isPlaying, state.isLocked]);
+
+    const stopFastForward = useCallback(() => {
+        if (fastForwardTimerRef.current) clearTimeout(fastForwardTimerRef.current);
+        if (isFastForwarding && player) {
+            player.video.playbackRate = originalRateRef.current; // Restore original rate
+            setIsFastForwarding(false);
+        }
+    }, [isFastForwarding, player]);
+
     const calculateTimeFromEvent = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -229,6 +267,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
+        if (state.isLocked) return;
         setIsScrubbing(true);
         setScrubbingTime(calculateTimeFromEvent(e));
         const handleMove = (moveEvent: MouseEvent | TouchEvent) => setScrubbingTime(calculateTimeFromEvent(moveEvent));
@@ -250,7 +289,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleVolumeStart = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!player) return;
+        if (!player || state.isLocked) return;
         setIsVolumeScrubbing(true);
         player.setVolume(calculateVolumeFromEvent(e));
         const handleMove = (moveEvent: MouseEvent | TouchEvent) => player.setVolume(calculateVolumeFromEvent(moveEvent));
@@ -264,7 +303,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleProgressMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!state.duration) return;
+        if (!state.duration || state.isLive) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const percent = (e.clientX - rect.left) / rect.width;
         const time = percent * state.duration;
@@ -274,7 +313,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const triggerSkip = (direction: 'forward' | 'rewind') => {
-        if (!player) return;
+        if (!player || state.isLocked) return;
         player.skip(direction === 'forward' ? 10 : -10);
         setSkipTrigger(direction);
         setTimeout(() => setSkipTrigger(null), 300);
@@ -286,7 +325,19 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (subtitleMenuOpen) setSubtitleMenuOpen(false);
         if (isVolumeLocked) setIsVolumeLocked(false);
 
+        // Wake up controls so lock button is visible if locked
+        setShowControls(true);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = setTimeout(() => {
+            if (!state.isPlaying || settingsOpen || subtitleMenuOpen) return;
+            setShowControls(false);
+        }, 2500);
+
         if (!player) return;
+
+        // If locked, do nothing else (prevent play/pause, seek, double tap)
+        if (state.isLocked) return;
+
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const width = rect.width;
@@ -374,18 +425,26 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     }
     const center = getCenterSizes();
 
-    // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open
-    const isControlsVisible = showControls || !state.isPlaying || settingsOpen || subtitleMenuOpen;
+    // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open. 
+    // HIDDEN IF LOCKED.
+    const isControlsVisible = !state.isLocked && (showControls || !state.isPlaying || settingsOpen || subtitleMenuOpen);
     const isVolumeVisible = isVolumeHovered || isVolumeScrubbing || isVolumeLocked;
+
+    const backdropClass = isBackdrop ? 'backdrop-blur-xl bg-black/80' : 'bg-black/95';
 
     return (
         <div
+            id={config.id}
             ref={containerRef}
-            className="group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none rounded-[var(--radius)] text-zinc-100 strata-player-reset"
+            className={`group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none rounded-[var(--radius)] text-zinc-100 strata-player-reset ${config.container || ''}`}
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen) setShowControls(false); }}
+            onMouseDown={startFastForward}
+            onMouseUp={stopFastForward}
+            onTouchStart={startFastForward}
+            onTouchEnd={stopFastForward}
             tabIndex={0}
             role="region"
             aria-label="Video Player"
@@ -480,6 +539,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     border-radius: var(--radius-sm);
                     font-family: var(--font-main);
                 }
+                
+                /* Override Backdrop for specific themes if needed */
+                [data-theme="pixel"] .strata-backdrop { backdrop-filter: none; background: #000; }
+                [data-theme="hacker"] .strata-backdrop { backdrop-filter: none; background: #000; }
             `}</style>
 
             {state.theme === 'hacker' && <div className="strata-scanlines" />}
@@ -498,6 +561,24 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         />
                     )}
 
+                    {/* Fast Forward Overlay */}
+                    {isFastForwarding && (
+                        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 z-40 animate-in fade-in zoom-in duration-200">
+                            <FastForwardIcon className="w-4 h-4 text-[var(--accent)] fill-current" />
+                            <span className="text-xs font-bold tracking-wider">2x Speed</span>
+                        </div>
+                    )}
+
+                    {/* Mobile Lock Button (Visible if enabled, and controls are active - regardless of lock state) */}
+                    {useLock && showControls && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); player.toggleLock(); }}
+                            className={`absolute left-4 md:left-6 bottom-24 md:bottom-28 z-50 p-3 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white transition-all active:scale-95 ${state.isLocked ? 'text-[var(--accent)] bg-white/10' : 'hover:bg-white/10'}`}
+                        >
+                            {state.isLocked ? <LockIcon className="w-5 h-5" /> : <UnlockIcon className="w-5 h-5" />}
+                        </button>
+                    )}
+
                     {seekAnimation && (
                         <div
                             key={seekAnimation.id}
@@ -513,8 +594,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
                     {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
 
-                    {/* Center Controls */}
-                    {((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering ? (
+                    {/* Center Controls - Hidden if locked */}
+                    {!state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering) ? (
                         <div
                             className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         >
@@ -526,37 +607,44 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         </div>
                     ) : null}
 
-                    {/* Bottom Control Bar */}
+                    {/* Bottom Control Bar - Hidden if locked */}
                     <div
-                        className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+                        className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
                         onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); setIsVolumeLocked(false); } e.stopPropagation(); }}
                     >
-                        {/* Progress Bar */}
-                        <div
-                            ref={progressBarRef}
-                            className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center"
-                            onMouseMove={handleProgressMove}
-                            onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }}
-                            onMouseDown={handleSeekStart}
-                            onTouchStart={handleSeekStart}
-                        >
-                            {hoverTime !== null && (<div className="absolute bottom-full mb-1.5 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px`, borderRadius: 'var(--radius)' }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="strata-tooltip px-2 py-0.5 text-[11px] font-bold font-mono shadow-lg tabular-nums mt-1">{formatTime(hoverTime)}</div></div>)}
-
-                            {/* Track */}
-                            <div className="w-full h-1 bg-white/20 overflow-hidden relative backdrop-blur-sm border-[length:var(--border-width)] border-white/10" style={{ borderRadius: 'var(--radius-full)' }}>
-                                {state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}
-                                <div className="absolute left-0 top-0 bottom-0 bg-[var(--accent)]" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} />
-                            </div>
-
-                            {/* Thumb */}
+                        {/* Progress Bar (Hidden in Live Mode) */}
+                        {!config.isLive && (
                             <div
-                                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white shadow-md scale-0 group-hover/slider:scale-100 transition-transform duration-100 z-10"
-                                style={{
-                                    left: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%`,
-                                    borderRadius: 'var(--radius-full)'
-                                }}
-                            />
-                        </div>
+                                ref={progressBarRef}
+                                className="relative w-full h-3 group/slider mb-3 cursor-pointer touch-none flex items-center"
+                                onMouseMove={handleProgressMove}
+                                onMouseLeave={() => { setHoverTime(null); setCurrentThumbnail(null); }}
+                                onMouseDown={handleSeekStart}
+                                onTouchStart={handleSeekStart}
+                            >
+                                {/* Highlights */}
+                                {config.highlight?.map((h, i) => (
+                                    <div key={i} className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-yellow-400 rounded-full z-10 pointer-events-none" style={{ left: `${(h.time / state.duration) * 100}%` }} title={h.text} />
+                                ))}
+
+                                {hoverTime !== null && (<div className="absolute bottom-full mb-1.5 flex flex-col items-center transform -translate-x-1/2 z-40 pointer-events-none transition-opacity duration-150" style={{ left: `clamp(70px, ${hoverPos}%, calc(100% - 70px))` }}>{currentThumbnail && (<div className="bg-black/90 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm" style={{ width: `${currentThumbnail.w * 0.5}px`, height: `${currentThumbnail.h * 0.5}px`, borderRadius: 'var(--radius)' }}><div style={{ backgroundImage: `url("${currentThumbnail.url}")`, width: `${currentThumbnail.w}px`, height: `${currentThumbnail.h}px`, backgroundPosition: `-${currentThumbnail.x}px -${currentThumbnail.y}px`, backgroundRepeat: 'no-repeat', transform: 'scale(0.5)', transformOrigin: 'top left' }} /></div>)}<div className="strata-tooltip px-2 py-0.5 text-[11px] font-bold font-mono shadow-lg tabular-nums mt-1">{formatTime(hoverTime)}</div></div>)}
+
+                                {/* Track */}
+                                <div className="w-full h-1 bg-white/20 overflow-hidden relative backdrop-blur-sm border-[length:var(--border-width)] border-white/10" style={{ borderRadius: 'var(--radius-full)' }}>
+                                    {state.duration > 0 && state.buffered.map((range, i) => (<div key={i} className="absolute top-0 bottom-0 bg-white/20" style={{ left: `${(range.start / state.duration) * 100}%`, width: `${((range.end - range.start) / state.duration) * 100}%` }} />))}
+                                    <div className="absolute left-0 top-0 bottom-0 bg-[var(--accent)]" style={{ width: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%` }} />
+                                </div>
+
+                                {/* Thumb */}
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white shadow-md scale-0 group-hover/slider:scale-100 transition-transform duration-100 z-10"
+                                    style={{
+                                        left: `${((isScrubbing ? scrubbingTime : state.currentTime) / state.duration) * 100}%`,
+                                        borderRadius: 'var(--radius-full)'
+                                    }}
+                                />
+                            </div>
+                        )}
 
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -591,8 +679,16 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     )}
                                 </div>
 
-                                <div className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
+                                {config.isLive ? (
+                                    <div className="flex items-center gap-2 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-md">
+                                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                        <span className="text-[10px] font-bold text-red-500 tracking-wider">LIVE</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
+                                )}
                             </div>
+
                             <div className="flex items-center gap-1">
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
@@ -609,112 +705,139 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                             offset={state.subtitleOffset}
                                             onOffsetChange={(val: number) => player.setSubtitleOffset(val)}
                                             maxHeight={menuMaxHeight}
-                                            animationClass={subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}
+                                            animationClass={`strata-backdrop ${backdropClass} ${subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
                                         />
                                     )}
                                 </div>
-                                <button onClick={() => player.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>
+                                {useScreenshot && <button onClick={() => player.screenshot()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Screenshot"><CameraIcon className={iconClass} /></button>}
+                                {usePip && <button onClick={() => player.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>}
                                 <button onClick={() => player.download()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>
-                                <div className="relative">
-                                    <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
-                                    {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}><div className="w-full">
 
-                                        {activeMenu === 'main' && (
-                                            <div className="animate-in slide-in-from-left-4 fade-in duration-200">
-                                                <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
-                                                {state.sources.length > 1 && <MenuItem label="Source" value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />}
-                                                <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
-                                                <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
-                                                <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
-                                                <MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
-                                                <MenuDivider />
-                                                <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
-                                                <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} />
-                                                <MenuDivider />
-                                                <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
-                                            </div>
-                                        )}
+                                {useSetting && (
+                                    <div className="relative">
+                                        <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
+                                        {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={`strata-backdrop ${backdropClass} ${settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}><div className="w-full">
 
-                                        {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources'].includes(activeMenu) && (
-                                            <div className="animate-in slide-in-from-right-4 fade-in duration-200">
-                                                {activeMenu === 'sources' && (<><MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />{state.sources.map((src, i) => (<MenuItem key={i} label={src.name || `Source ${i + 1}`} value={src.type} active={state.currentSourceIndex === i} onClick={() => player.switchSource(i)} />))}</>)}
-                                                {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}
-                                                {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}
-                                                {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}
-                                                {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}
-                                                {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
-                                                {activeMenu === 'appearance' && (
-                                                    <>
-                                                        <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
-                                                        <div className="pb-1">
-                                                            <SettingsGroup title="Theme">
-                                                                <div className="grid grid-cols-2 gap-2 px-3">
-                                                                    {THEMES.map(theme => (
-                                                                        <button
-                                                                            key={theme.value}
-                                                                            onClick={() => player.setAppearance({ theme: theme.value, themeColor: theme.color })}
-                                                                            className={`py-2 text-xs font-bold uppercase tracking-wide transition-colors border-[length:var(--border-width)] border-white/10 ${state.theme === theme.value ? 'bg-[var(--accent)] text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}
-                                                                            style={{ borderRadius: 'var(--radius)' }}
-                                                                        >
-                                                                            {theme.label}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            </SettingsGroup>
+                                            {activeMenu === 'main' && (
+                                                <div className="animate-in slide-in-from-left-4 fade-in duration-200">
+                                                    <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
+                                                    {state.sources.length > 1 && <MenuItem label="Source" value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />}
+                                                    <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
+                                                    <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
+                                                    <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
+                                                    {useFlip && <MenuItem label="Flip" value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
+                                                    {useAspectRatio && <MenuItem label="Aspect Ratio" value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
+                                                    <MenuDivider />
+                                                    <MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
+                                                    <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
+                                                    <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player.requestCast(); setSettingsOpen(false); }} />
+                                                    <MenuDivider />
+                                                    <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
+                                                </div>
+                                            )}
 
-                                                            <SettingsGroup title="Icon Size">
-                                                                <div className="grid grid-cols-3 gap-1 px-3">
-                                                                    {(['small', 'medium', 'large'] as const).map(s => (
-                                                                        <button
-                                                                            key={s}
-                                                                            onClick={() => player.setAppearance({ iconSize: s })}
-                                                                            className={`py-1.5 text-xs font-medium transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`}
-                                                                            style={{ borderRadius: 'var(--radius)' }}
-                                                                        >
-                                                                            {s.charAt(0).toUpperCase() + s.slice(1)}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            </SettingsGroup>
+                                            {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio'].includes(activeMenu) && (
+                                                <div className="animate-in slide-in-from-right-4 fade-in duration-200">
+                                                    {activeMenu === 'sources' && (<><MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />{state.sources.map((src, i) => (<MenuItem key={i} label={src.name || `Source ${i + 1}`} value={src.type} active={state.currentSourceIndex === i} onClick={() => player.switchSource(i)} />))}</>)}
+                                                    {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player.video.playbackRate = rate} />))}</>)}
+                                                    {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player.setQuality(lvl.index)} />))}</>)}
+                                                    {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player.setAudioTrack(track.index)} />))}</>)}
+                                                    {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player.setAudioGain(gain)} />))}</>)}
 
-                                                            <SettingsGroup title="Theme Color">
-                                                                <div className="grid grid-cols-6 gap-2 px-3">
-                                                                    {THEME_COLORS.map(c => (
-                                                                        <button
-                                                                            key={c.value}
-                                                                            title={c.label}
-                                                                            onClick={() => player.setAppearance({ themeColor: c.value })}
-                                                                            className={`w-6 h-6 transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`}
-                                                                            style={{ backgroundColor: c.value, borderRadius: 'var(--radius-full)' }}
-                                                                        >
-                                                                            {state.themeColor === c.value && <CheckIcon className="w-3 h-3 text-white mx-auto stroke-[3]" />}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                                <div className="px-3 pt-4">
-                                                                    <div className="flex items-center gap-3 bg-white/5 p-2 hover:bg-white/10 transition-colors group" style={{ borderRadius: 'var(--radius)' }}>
-                                                                        <div className="relative w-6 h-6 overflow-hidden ring-1 ring-white/20" style={{ borderRadius: 'var(--radius-full)' }}>
-                                                                            <input
-                                                                                type="color"
-                                                                                value={state.themeColor}
-                                                                                onChange={(e) => player.setAppearance({ themeColor: e.target.value })}
-                                                                                className="absolute inset-[-4px] w-[150%] h-[150%] cursor-pointer p-0 border-0"
-                                                                            />
-                                                                        </div>
-                                                                        <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-200">Custom Color</span>
-                                                                        <span className="text-[10px] font-mono text-zinc-500 ml-auto uppercase">{state.themeColor}</span>
+                                                    {activeMenu === 'flip' && (
+                                                        <>
+                                                            <MenuHeader label="Video Flip" onBack={() => setActiveMenu('main')} />
+                                                            <div className="p-2 space-y-1">
+                                                                <Toggle label="Horizontal Flip" checked={state.flipState.horizontal} onChange={() => player.setFlip('horizontal')} />
+                                                                <Toggle label="Vertical Flip" checked={state.flipState.vertical} onChange={() => player.setFlip('vertical')} />
+                                                            </div>
+                                                        </>
+                                                    )}
+
+                                                    {activeMenu === 'ratio' && (
+                                                        <>
+                                                            <MenuHeader label="Aspect Ratio" onBack={() => setActiveMenu('main')} />
+                                                            {['default', '16:9', '4:3'].map(r => (
+                                                                <MenuItem key={r} label={r === 'default' ? 'Default' : r} active={state.aspectRatio === r} onClick={() => player.setAspectRatio(r)} />
+                                                            ))}
+                                                        </>
+                                                    )}
+
+                                                    {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
+                                                    {activeMenu === 'appearance' && (
+                                                        <>
+                                                            <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
+                                                            <div className="pb-1">
+                                                                <SettingsGroup title="Theme">
+                                                                    <div className="grid grid-cols-2 gap-2 px-3">
+                                                                        {THEMES.map(theme => (
+                                                                            <button
+                                                                                key={theme.value}
+                                                                                onClick={() => player.setAppearance({ theme: theme.value, themeColor: theme.color })}
+                                                                                className={`py-2 text-xs font-bold uppercase tracking-wide transition-colors border-[length:var(--border-width)] border-white/10 ${state.theme === theme.value ? 'bg-[var(--accent)] text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}
+                                                                                style={{ borderRadius: 'var(--radius)' }}
+                                                                            >
+                                                                                {theme.label}
+                                                                            </button>
+                                                                        ))}
                                                                     </div>
-                                                                </div>
-                                                            </SettingsGroup>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
+                                                                </SettingsGroup>
 
-                                    </div></Menu>)}
-                                </div>
-                                <button onClick={() => player.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>
+                                                                <SettingsGroup title="Icon Size">
+                                                                    <div className="grid grid-cols-3 gap-1 px-3">
+                                                                        {(['small', 'medium', 'large'] as const).map(s => (
+                                                                            <button
+                                                                                key={s}
+                                                                                onClick={() => player.setAppearance({ iconSize: s })}
+                                                                                className={`py-1.5 text-xs font-medium transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`}
+                                                                                style={{ borderRadius: 'var(--radius)' }}
+                                                                            >
+                                                                                {s.charAt(0).toUpperCase() + s.slice(1)}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </SettingsGroup>
+
+                                                                <SettingsGroup title="Theme Color">
+                                                                    <div className="grid grid-cols-6 gap-2 px-3">
+                                                                        {THEME_COLORS.map(c => (
+                                                                            <button
+                                                                                key={c.value}
+                                                                                title={c.label}
+                                                                                onClick={() => player.setAppearance({ themeColor: c.value })}
+                                                                                className={`w-6 h-6 transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`}
+                                                                                style={{ backgroundColor: c.value, borderRadius: 'var(--radius-full)' }}
+                                                                            >
+                                                                                {state.themeColor === c.value && <CheckIcon className="w-3 h-3 text-white mx-auto stroke-[3]" />}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="px-3 pt-4">
+                                                                        <div className="flex items-center gap-3 bg-white/5 p-2 hover:bg-white/10 transition-colors group" style={{ borderRadius: 'var(--radius)' }}>
+                                                                            <div className="relative w-6 h-6 overflow-hidden ring-1 ring-white/20" style={{ borderRadius: 'var(--radius-full)' }}>
+                                                                                <input
+                                                                                    type="color"
+                                                                                    value={state.themeColor}
+                                                                                    onChange={(e) => player.setAppearance({ themeColor: e.target.value })}
+                                                                                    className="absolute inset-[-4px] w-[150%] h-[150%] cursor-pointer p-0 border-0"
+                                                                                />
+                                                                            </div>
+                                                                            <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-200">Custom Color</span>
+                                                                            <span className="text-[10px] font-mono text-zinc-500 ml-auto uppercase">{state.themeColor}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </SettingsGroup>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                        </div></Menu>)}
+                                    </div>
+                                )}
+                                {useFullscreenWeb && <button onClick={() => { }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>}
+                                {useFullscreen && <button onClick={() => player.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>}
                             </div>
                         </div>
                     </div>

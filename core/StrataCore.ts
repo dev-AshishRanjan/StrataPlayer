@@ -11,6 +11,14 @@ export interface Notification {
   progress?: number; // 0-100
 }
 
+export interface TextTrackConfig {
+  src: string;
+  label: string;
+  srcLang?: string;
+  default?: boolean;
+  kind?: 'subtitles' | 'captions' | 'descriptions' | 'chapters' | 'metadata';
+}
+
 export interface SubtitleSettings {
   useNative: boolean; // "Native video subtitle"
   fixCapitalization: boolean;
@@ -45,9 +53,15 @@ export interface PlayerSource {
   name?: string;
 }
 
+export interface Highlight {
+  time: number;
+  text: string;
+}
+
 export interface PlayerState {
   isPlaying: boolean;
   isBuffering: boolean;
+  isLive: boolean;
   currentTime: number;
   duration: number;
   buffered: { start: number; end: number }[];
@@ -76,24 +90,57 @@ export interface PlayerState {
   // Sources
   sources: PlayerSource[];
   currentSourceIndex: number;
+
+  // Phase 1 New Features State
+  isLocked: boolean;
+  flipState: { horizontal: boolean; vertical: boolean };
+  aspectRatio: string; // 'default', '16:9', '4:3'
+  isAutoSized: boolean; // tracks if autoSize (cover) is currently applied
 }
 
 export interface StrataConfig {
+  // Basic
+  container?: string; // Class for container
+  id?: string;
+
   // Playback
   volume?: number;
   muted?: boolean;
   playbackRate?: number;
   audioGain?: number;
+  loop?: boolean;
+  playsInline?: boolean;
+  isLive?: boolean;
 
   // Appearance
   theme?: PlayerTheme;
   themeColor?: string;
   iconSize?: 'small' | 'medium' | 'large';
+  backdrop?: boolean; // Blur effect
+  autoSize?: boolean; // object-fit: cover logic
 
   // Subtitles
   subtitleSettings?: Partial<SubtitleSettings>;
 
+  // UI Toggles
+  screenshot?: boolean;
+  setting?: boolean;
+  pip?: boolean;
+  fullscreen?: boolean;
+  fullscreenWeb?: boolean;
+  flip?: boolean;
+  aspectRatio?: boolean;
+  highlight?: Highlight[];
+
+  // Controls / Mobile
+  hotKey?: boolean;
+  lock?: boolean; // Mobile lock button
+  gesture?: boolean; // Mobile gestures
+  fastForward?: boolean; // Long press
+  autoOrientation?: boolean; // Mobile landscape lock
+
   // System
+  useSSR?: boolean;
   disablePersistence?: boolean;
 }
 
@@ -102,6 +149,7 @@ const STORAGE_KEY = 'strata-settings-v3';
 export const DEFAULT_STATE: PlayerState = {
   isPlaying: false,
   isBuffering: false,
+  isLive: false,
   currentTime: 0,
   duration: 0,
   buffered: [],
@@ -128,6 +176,11 @@ export const DEFAULT_STATE: PlayerState = {
   theme: 'default',
   sources: [],
   currentSourceIndex: -1,
+  // New State Defaults
+  isLocked: false,
+  flipState: { horizontal: false, vertical: false },
+  aspectRatio: 'default',
+  isAutoSized: false
 };
 
 // Helper to merge Defaults -> LocalStorage -> Config
@@ -157,7 +210,10 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     theme: config.theme ?? saved.theme ?? DEFAULT_STATE.theme,
     themeColor: config.themeColor ?? saved.themeColor ?? DEFAULT_STATE.themeColor,
     iconSize: config.iconSize ?? saved.iconSize ?? DEFAULT_STATE.iconSize,
-    subtitleSettings: mergedSubtitleSettings
+    subtitleSettings: mergedSubtitleSettings,
+    // Config overrides state for these visual modes
+    isAutoSized: config.autoSize ?? DEFAULT_STATE.isAutoSized,
+    isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive
   };
 };
 
@@ -167,14 +223,6 @@ export interface IPlugin {
   destroy?(): void;
 }
 
-export interface TextTrackConfig {
-  kind: 'subtitles' | 'captions' | 'descriptions' | 'chapters' | 'metadata';
-  label: string;
-  src: string;
-  srcLang: string;
-  default?: boolean;
-}
-
 export class StrataCore {
   public video: HTMLVideoElement;
   public container: HTMLElement | null = null;
@@ -182,7 +230,7 @@ export class StrataCore {
   public store: NanoStore<PlayerState>;
   private plugins: Map<string, IPlugin> = new Map();
   private audioEngine: AudioEngine;
-  private config: StrataConfig;
+  public config: StrataConfig;
 
   // Retry Logic
   private retryCount = 0;
@@ -202,6 +250,11 @@ export class StrataCore {
     this.config = config;
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
+
+    // Init Config Props to Video
+    if (config.playsInline !== false) this.video.playsInline = true;
+    if (config.loop) this.video.loop = true;
+
     this.events = new EventBus();
 
     // Initialize Store with resolved state
@@ -213,7 +266,22 @@ export class StrataCore {
 
     // Bind fullscreen listener once
     this.boundFullscreenChange = () => {
-      this.store.setState({ isFullscreen: !!document.fullscreenElement });
+      const isFs = !!document.fullscreenElement;
+      this.store.setState({ isFullscreen: isFs });
+
+      // Auto Orientation logic
+      if (isFs && this.config.autoOrientation && screen.orientation && 'lock' in screen.orientation) {
+        // Basic logic: if video width > height, lock landscape
+        const isLandscape = this.video.videoWidth > this.video.videoHeight;
+        const lockType = isLandscape ? 'landscape' : 'portrait';
+        try {
+          // @ts-ignore
+          screen.orientation.lock(lockType).catch(() => { });
+        } catch (e) { }
+      } else if (!isFs && screen.orientation && 'unlock' in screen.orientation) {
+        // @ts-ignore
+        screen.orientation.unlock();
+      }
     };
 
     // Apply initial state to video element
@@ -222,6 +290,10 @@ export class StrataCore {
     this.video.playbackRate = initialState.playbackRate;
     if (initialState.audioGain > 1) {
       this.audioEngine.setGain(initialState.audioGain);
+    }
+    // Apply AutoSize
+    if (initialState.isAutoSized) {
+      this.video.style.objectFit = 'cover';
     }
 
     this.initVideoListeners();
@@ -237,7 +309,8 @@ export class StrataCore {
           subtitleSettings: state.subtitleSettings,
           iconSize: state.iconSize,
           themeColor: state.themeColor,
-          theme: state.theme
+          theme: state.theme,
+          isLive: state.isLive
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       });
@@ -388,7 +461,7 @@ export class StrataCore {
     if (!this.container.contains(this.video)) {
       this.video.style.width = '100%';
       this.video.style.height = '100%';
-      this.video.style.objectFit = 'contain';
+      this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
       this.video.style.backgroundColor = 'black';
       this.container.appendChild(this.video);
     }
@@ -575,23 +648,8 @@ export class StrataCore {
     try {
       if (!document.fullscreenElement) {
         await this.container.requestFullscreen();
-        // Attempt to lock orientation to landscape on mobile devices
-        if (screen.orientation && 'lock' in screen.orientation) {
-          try {
-            // @ts-ignore - 'lock' type defs might be missing in some setups
-            await screen.orientation.lock('landscape');
-          } catch (e) {
-            // Orientation lock not supported or failed (expected on some devices/browsers)
-            // We fail silently as standard fullscreen is sufficient fallback
-          }
-        }
+        // Orientation lock handled in boundFullscreenChange
       } else {
-        if (screen.orientation && 'unlock' in screen.orientation) {
-          try {
-            // @ts-ignore
-            screen.orientation.unlock();
-          } catch (e) { }
-        }
         await document.exitFullscreen();
       }
     } catch (err) {
@@ -605,6 +663,74 @@ export class StrataCore {
     } else if (this.video !== document.pictureInPictureElement && (this.video as any).requestPictureInPicture) {
       (this.video as any).requestPictureInPicture();
     }
+  }
+
+  screenshot() {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.video.videoWidth;
+    canvas.height = this.video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
+      try {
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.download = `screenshot-${new Date().toISOString()}.png`;
+        a.href = url;
+        a.click();
+        this.notify({ type: 'success', message: 'Screenshot saved', duration: 2000 });
+      } catch (e) {
+        this.notify({ type: 'error', message: 'Failed to take screenshot', duration: 3000 });
+      }
+    }
+  }
+
+  toggleLock() {
+    this.store.setState((prev) => ({ isLocked: !prev.isLocked }));
+  }
+
+  setFlip(direction: 'horizontal' | 'vertical') {
+    const current = this.store.get().flipState;
+    const newState = {
+      ...current,
+      [direction]: !current[direction]
+    };
+    this.store.setState({ flipState: newState });
+
+    const scaleX = newState.horizontal ? -1 : 1;
+    const scaleY = newState.vertical ? -1 : 1;
+    this.video.style.transform = `scale(${scaleX}, ${scaleY})`;
+  }
+
+  setAspectRatio(ratio: string) {
+    // ratio: 'default' | '16:9' | '4:3'
+    this.store.setState({ aspectRatio: ratio });
+
+    if (ratio === 'default') {
+      this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
+      // Reset explicit sizing
+      this.video.style.width = '100%';
+      this.video.style.height = '100%';
+      return;
+    }
+
+    // Basic CSS Aspect Ratio forcing via object-fit contain within specific box?
+    // ArtPlayer approach: Force object-fit fill and calculate dimensions.
+    // Simpler approach for now:
+    // We will rely on CSS object-fit contain, but we can't easily change the container's aspect ratio without affecting layout.
+    // So we will just reset objectFit to contain for safety.
+    // For true aspect ratio forcing, we might need a wrapper, or use object-fit: fill with specific W/H.
+    // Let's implement object-fit: fill + calc() based on container size in UI or resize observer.
+
+    // For this phase, we'll keep it simple: Just object-fit changes for autoSize, but aspect ratio requires more complex DOM manipulation usually.
+    // We will simulate it by manipulating object-fit and maybe max-width/height if possible.
+    // Actually, standard players implement aspect ratio by cropping (cover) or fitting (contain).
+    // If user selects 16:9 on a 4:3 video, they usually want to stretch it (fill) or crop it?
+    // Usually it means "Force video to display as 16:9".
+
+    // Let's use standard object-fit logic for now.
+    this.video.style.objectFit = 'contain';
+    this.notify({ type: 'info', message: `Aspect Ratio: ${ratio} (CSS support limited)`, duration: 2000 });
   }
 
   private initCast() {

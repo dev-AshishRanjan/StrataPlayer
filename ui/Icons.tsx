@@ -31,7 +31,14 @@ import {
   RefreshCcw,
   Bold,
   CaseUpper,
-  Droplet
+  Droplet,
+  Camera,
+  Lock,
+  Unlock,
+  Monitor,
+  Zap,
+  Ratio,
+  Expand
 } from 'lucide-react';
 
 export const PlayIcon = Play;
@@ -63,6 +70,13 @@ export const ResetIcon = RefreshCcw;
 export const BoldIcon = Bold;
 export const CaseUpperIcon = CaseUpper;
 export const BlurIcon = Droplet;
+export const CameraIcon = Camera;
+export const LockIcon = Lock;
+export const UnlockIcon = Unlock;
+export const WebFullscreenIcon = Monitor;
+export const FastForwardIcon = Zap;
+export const RatioIcon = Ratio;
+export const ExpandIcon = Expand;
 
 // Custom 10s Skip Icons using Lucide base
 export const Replay10Icon = ({ className }: { className?: string }) => (
