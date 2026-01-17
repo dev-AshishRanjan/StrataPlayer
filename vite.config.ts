@@ -10,10 +10,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-  // Shared alias config to fix webtorrent/bittorrent-dht build issues
+  // Shared alias config
   const resolveConfig = {
     alias: {
-      // We still need to shim bittorrent-dht to prevent build errors
+      // Shim bittorrent-dht to prevent server-side node-only deps from breaking build
       'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
     }
   };
@@ -21,17 +21,28 @@ export default defineConfig(({ mode }) => {
   const commonPlugins = [
     react(),
     nodePolyfills({
+      // Whether to polyfill `node:` protocol imports.
+      protocolImports: true,
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
-      protocolImports: true, // Allow import 'node:events', 'node:stream' etc.
     })
   ];
 
+  const commonOptimizeDeps = {
+    include: [
+      'webtorrent',
+      'simple-peer',
+      'readable-stream',
+      'util',
+      'events'
+    ],
+    exclude: ['streamx']
+  };
+
   // 1. Library Build (NPM Package)
-  // Runs when `vite build --mode lib` is called
   if (mode === 'lib') {
     return {
       plugins: [
@@ -96,18 +107,41 @@ export default defineConfig(({ mode }) => {
   if (mode === 'demo') {
     return {
       plugins: commonPlugins,
-      resolve: resolveConfig,
+      resolve: {
+        alias: {
+          stream: 'readable-stream',
+          'readable-stream': 'readable-stream',
+          util: 'util',
+          events: 'events',
+          process: 'process/browser',
+          buffer: 'buffer',
+          // your existing shim
+          'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
+        },
+        dedupe: ['stream', 'readable-stream', 'streamx'],
+      },
       base: '/StrataPlayer/',
       define: {
-        global: 'globalThis', // Fixes "global is not defined" in many node libs
+        // Vital for some node modules that check global
+        global: 'globalThis',
       },
       build: {
         outDir: 'dist-site',
         emptyOutDir: true,
         commonjsOptions: {
-          transformMixedEsModules: true, // Important for WebTorrent dependencies
+          // Ensure these CommonJS modules are transformed correctly
+          include: [/webtorrent/, /streamx/, /readable-stream/, /simple-peer/, /node_modules/],
+          transformMixedEsModules: true,
+        },
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              vendor: ['react', 'react-dom', 'hls.js', 'dashjs', 'mpegts.js']
+            }
+          }
         }
-      }
+      },
+      optimizeDeps: commonOptimizeDeps
     };
   }
 
@@ -118,6 +152,16 @@ export default defineConfig(({ mode }) => {
     base: '/',
     define: {
       global: 'globalThis',
-    }
+    },
+    optimizeDeps: {
+      include: [
+        'webtorrent',
+        'simple-peer',
+        'readable-stream',
+        'util',
+        'streamx',
+        'events'
+      ],
+    },
   };
 });
