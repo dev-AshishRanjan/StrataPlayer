@@ -3,6 +3,9 @@ import React, { useState } from 'react';
 import { StrataPlayer } from '../ui/StrataPlayer';
 import { PlayIcon } from '../ui/Icons';
 import { HlsPlugin } from '../plugins/HlsPlugin';
+import { DashPlugin } from '../plugins/DashPlugin';
+import { MpegtsPlugin } from '../plugins/MpegtsPlugin';
+import { WebTorrentPlugin } from '../plugins/WebTorrentPlugin';
 
 export const Playground = () => {
   const [playgroundInput, setPlaygroundInput] = useState('');
@@ -15,24 +18,29 @@ export const Playground = () => {
     }
   };
 
-  // Initialize plugins (HLS support for the playground)
-  const plugins = [new HlsPlugin()];
+  // Initialize all plugins for the playground
+  const plugins = [
+    new HlsPlugin(),
+    new DashPlugin(),
+    new MpegtsPlugin(),
+    new WebTorrentPlugin()
+  ];
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold tracking-tight mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">Stream Playground</h1>
-        <p className="text-zinc-400 text-lg">Test any HLS (.m3u8) or MP4 stream URL instantly.</p>
+        <p className="text-zinc-400 text-lg">Test any HLS, DASH, MP4, or WebTorrent URL.</p>
       </div>
 
       <form onSubmit={handlePlaygroundPlay} className="w-full max-w-2xl flex gap-3 mb-12">
         <input
-          type="url"
+          type="text"
           required
-          placeholder="https://example.com/stream.m3u8"
+          placeholder="https://example.com/stream.m3u8 or magnet:?xt=..."
           value={playgroundInput}
           onChange={(e) => setPlaygroundInput(e.target.value)}
-          className="flex-1 bg-zinc-900/80 border border-white/10 rounded-xl px-5 py-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+          className="flex-1 bg-zinc-900/80 border border-white/10 rounded-xl px-5 py-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner font-mono text-sm"
         />
         <button
           type="submit"
@@ -61,8 +69,8 @@ export const Playground = () => {
         )}
       </div>
 
-      <div className="mt-8 flex gap-3 text-sm">
-        <span className="text-zinc-500 py-1.5">Try:</span>
+      <div className="mt-8 flex flex-wrap justify-center gap-3 text-sm">
+        <span className="text-zinc-500 py-1.5 w-full text-center sm:w-auto">Quick Load:</span>
         <button
           onClick={() => {
             const url = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
@@ -71,17 +79,27 @@ export const Playground = () => {
           }}
           className="px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-full text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
         >
-          Big Buck Bunny
+          HLS (Bunny)
         </button>
         <button
           onClick={() => {
-            const url = "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel-multi-lang.ism/.m3u8";
+            const url = "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.mpd";
             setPlaygroundInput(url);
             setPlaygroundSrc(url);
           }}
           className="px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-full text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
         >
-          Tears of Steel
+          DASH (Tears of Steel)
+        </button>
+        <button
+          onClick={() => {
+            const url = "https://webtorrent.io/torrents/sintel.torrent";
+            setPlaygroundInput(url);
+            setPlaygroundSrc(url);
+          }}
+          className="px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-full text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
+        >
+          Torrent (Sintel)
         </button>
       </div>
     </div>

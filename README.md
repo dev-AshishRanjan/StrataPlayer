@@ -22,24 +22,21 @@
 
 ## Introduction
 
-StrataPlayer represents a shift in how media playback is handled on the web. Instead of tightly coupling playback logic to a specific framework, StrataPlayer operates as a **framework-agnostic engine**.
+StrataPlayer is a production-grade, framework-agnostic media engine designed for the modern web. It decouples playback logic from the UI, ensuring high-performance rendering even during rapid state updates.
 
-While the UI layer is powered by the high-performance concurrent rendering of React 19, the player itself can be mounted into **any** application—be it Vanilla JS, Vue, Svelte, or Angular. It decouples the "playback state" (time, buffer, quality) from the "view layer," ensuring that high-frequency updates (like progress bars) never cause performance bottlenecks in your host application.
+Built on **React 19** and **TypeScript**, it features a modular plugin architecture that allows you to support only the formats you need—keeping your bundle size minimal while offering support for everything from HLS to BitTorrent streaming.
 
-## Core Philosophy
+## ✨ Key Features
 
-1.  **Universal Compatibility:** Write once, run anywhere. Whether you are building a static HTML site or a complex Next.js application, the implementation remains consistent.
-2.  **State Isolation:** The playback engine runs on a detached state store (`NanoStore`). This allows the player to handle micro-updates (video time, download progress) internally without triggering re-renders in your parent application.
-3.  **Modular Architecture:** The core is ultra-lightweight. Heavy dependencies like HLS (`.m3u8`) are entirely opt-in via sub-path imports, keeping your main bundle size minimal.
-
-## ✨ Features
-
-- **Framework Agnostic:** First-class support for React, with a mounting API for Vue, Svelte, and Vanilla JS.
-- **Resilient Network Handling:** Automatic exponential backoff and retry logic for unstable connections.
-- **Adaptive Streaming:** Plugin-based support for HLS (powered by `hls.js`).
-- **Audio Boost Engine:** Integrated Web Audio API nodes allowing volume boosting up to 300%.
-- **Themeable System:** 4 built-in distinct themes (Default, Pixel, Game, Hacker).
-- **Advanced Subtitles:** DOM-based rendering supporting custom positioning, shadows, and runtime sync adjustment.
+- **Universal Playback:** Support for **HLS**, **DASH**, **MPEG-TS/FLV**, and **WebTorrent** (P2P).
+- **Framework Agnostic:** First-class React support, with easy mounting for Vue, Svelte, Angular, and Vanilla JS.
+- **Robust Network Handling:** Automatic exponential backoff and retry logic for unstable connections.
+- **Advanced Audio Engine:** Integrated Web Audio API nodes for volume boosting (up to 300%) and gain control.
+- **Professional UI:**
+  - **Themes:** 4 built-in distinct themes (Default, Pixel, Game, Hacker).
+  - **Subtitles:** Comprehensive VTT/SRT support with user-customizable styling (size, color, sync, shadows).
+  - **Picture-in-Picture** & **Google Cast** integration.
+- **State Management:** Powered by `NanoStore` for isolated, high-performance state updates.
 
 ## 🚀 Installation
 
@@ -49,17 +46,27 @@ Install the core player:
 npm install strataplayer
 ```
 
-If you need HLS support (streaming `.m3u8` files), install the peer dependency:
+Install the specific engines you need as peer dependencies:
 
 ```bash
+# For HLS (.m3u8)
 npm install hls.js
+
+# For DASH (.mpd)
+npm install dashjs
+
+# For MPEG-TS / FLV
+npm install mpegts.js
+
+# For WebTorrent (Magnet links)
+npm install webtorrent
 ```
 
 ## 💻 Usage
 
-### 1. React + MP4 (Basic)
+### 1. Basic Usage (React)
 
-For standard video files, simply import the component. No extra plugins required.
+For standard MP4/WebM files, no plugins are required.
 
 ```tsx
 import { StrataPlayer } from "strataplayer";
@@ -76,88 +83,138 @@ const App = () => {
 };
 ```
 
-### 2. React + HLS (Advanced)
+### 2. Universal Player (All Formats)
 
-To play HLS streams, import the `HlsPlugin` from the sub-path `strataplayer/hls`.
+To support all formats, import the plugins and pass them to the player.
 
 ```tsx
 import { StrataPlayer } from "strataplayer";
-import { HlsPlugin } from "strataplayer/hls"; // Import from sub-path
+import { HlsPlugin } from "strataplayer/hls";
+import { DashPlugin } from "strataplayer/dash";
+import { MpegtsPlugin } from "strataplayer/mpegts";
+import { WebTorrentPlugin } from "strataplayer/webtorrent";
 import "strataplayer/style.css";
 
-// Initialize plugins outside render loop or via useMemo
-const plugins = [new HlsPlugin()];
+// Initialize plugins once
+const plugins = [
+  new HlsPlugin(),
+  new DashPlugin(),
+  new MpegtsPlugin(),
+  new WebTorrentPlugin(),
+];
 
 const App = () => {
   return (
     <StrataPlayer
-      src="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+      // Can be a magnet link, m3u8, mpd, or mp4
+      src="magnet:?xt=urn:btih:..."
       plugins={plugins}
       theme="hacker"
+      autoPlay={false}
     />
   );
 };
 ```
 
-### 3. Vanilla JS / Vue / Svelte + MP4
+### 3. Vanilla JS / Vue / Svelte
 
-For non-React frameworks, use the `mountStrataPlayer` helper.
-
-**index.html**
-
-```html
-<div id="player-container" style="width: 100%; aspect-ratio: 16/9;"></div>
-```
-
-**main.js**
-
-```javascript
-import { mountStrataPlayer } from "strataplayer";
-import "strataplayer/style.css";
-
-const container = document.getElementById("player-container");
-
-const instance = mountStrataPlayer(container, {
-  src: "https://example.com/video.mp4",
-  autoPlay: false,
-  theme: "game",
-});
-
-// Cleanup when done
-// instance.unmount();
-```
-
-### 4. Vanilla JS / Vue / Svelte + HLS
-
-Just like in React, import the plugin and pass it in the config object.
+Use the `mountStrataPlayer` helper to render the player into any DOM node.
 
 ```javascript
 import { mountStrataPlayer } from "strataplayer";
 import { HlsPlugin } from "strataplayer/hls";
 import "strataplayer/style.css";
 
-const instance = mountStrataPlayer(document.getElementById("root"), {
+const container = document.getElementById("player-root");
+
+const player = mountStrataPlayer(container, {
   src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
   plugins: [new HlsPlugin()],
+  theme: "game",
+  themeColor: "#eab308",
 });
+
+// Update props later
+// player.update({ theme: 'pixel' });
+
+// Cleanup
+// player.unmount();
 ```
 
-## ⚙️ Advanced Configuration
+## 📋 Component Props
+
+The `<StrataPlayer />` component accepts the following props:
+
+| Prop                   | Type                                         | Default     | Description                                                                                |
+| :--------------------- | :------------------------------------------- | :---------- | :----------------------------------------------------------------------------------------- |
+| **src**                | `string`                                     | `undefined` | The primary media URL.                                                                     |
+| **sources**            | `PlayerSource[]`                             | `[]`        | Array of sources for quality fallback or alternative formats. Overrides `src` if provided. |
+| **poster**             | `string`                                     | `undefined` | URL for the poster image shown before playback.                                            |
+| **autoPlay**           | `boolean`                                    | `false`     | Whether to start playback automatically. Note: Browsers may block unmuted autoplay.        |
+| **volume**             | `number`                                     | `1`         | Initial volume (0.0 to 1.0).                                                               |
+| **muted**              | `boolean`                                    | `false`     | Initial mute state.                                                                        |
+| **theme**              | `'default' \| 'pixel' \| 'game' \| 'hacker'` | `'default'` | The visual theme of the player.                                                            |
+| **themeColor**         | `string`                                     | `'#6366f1'` | Primary accent color (Hex, RGB).                                                           |
+| **iconSize**           | `'small' \| 'medium' \| 'large'`             | `'medium'`  | Size of the control icons.                                                                 |
+| **thumbnails**         | `string`                                     | `undefined` | URL to a VTT file containing storyboard thumbnails for hover preview.                      |
+| **textTracks**         | `TextTrackConfig[]`                          | `[]`        | Array of subtitle/caption tracks.                                                          |
+| **plugins**            | `IPlugin[]`                                  | `[]`        | Array of initialized plugin instances (e.g., `new HlsPlugin()`).                           |
+| **disablePersistence** | `boolean`                                    | `false`     | If `true`, prevents saving settings to LocalStorage.                                       |
+| **audioGain**          | `number`                                     | `1`         | Initial audio boost level (e.g., `1.5` for 150%).                                          |
+| **playbackRate**       | `number`                                     | `1`         | Initial playback speed.                                                                    |
+
+### Data Structures
+
+#### `PlayerSource`
+
+```ts
+{
+  url: string;
+  // Optional: 'hls' | 'dash' | 'mp4' | 'webm' | 'mpegts' | 'webtorrent'
+  // If omitted, the player attempts to detect it from the extension.
+  type?: string;
+  name?: string; // Label for source selector
+}
+```
+
+#### `TextTrackConfig`
+
+```ts
+{
+  kind: 'subtitles' | 'captions';
+  label: string;  // e.g. "English"
+  src: string;    // URL to .vtt file
+  srcLang: string; // e.g. "en"
+  default?: boolean;
+}
+```
+
+## 🧩 Plugin System
+
+StrataPlayer uses a modular system. You only pay the bundle size cost for the formats you use.
+
+| Plugin               | Import Path               | Dependency   | Description                          |
+| :------------------- | :------------------------ | :----------- | :----------------------------------- |
+| **HlsPlugin**        | `strataplayer/hls`        | `hls.js`     | Adaptive HTTP Live Streaming (.m3u8) |
+| **DashPlugin**       | `strataplayer/dash`       | `dashjs`     | MPEG-DASH Streaming (.mpd)           |
+| **MpegtsPlugin**     | `strataplayer/mpegts`     | `mpegts.js`  | MPEG-TS and FLV live streams         |
+| **WebTorrentPlugin** | `strataplayer/webtorrent` | `webtorrent` | P2P streaming via WebRTC             |
+
+## ⚙️ Configuration
 
 ### Sources & Tracks
 
-StrataPlayer supports complex source arrays (for quality fallbacks) and subtitle tracks.
+Support multiple sources for quality fallback and detailed subtitle configuration.
 
-```javascript
-const props = {
-  // Priority order: HLS -> MP4
-  sources: [
-    { name: "Stream", url: "master.m3u8", type: "hls" },
-    { name: "Download", url: "fallback.mp4", type: "mp4" },
-  ],
-  poster: "https://example.com/poster.jpg",
-  thumbnails: "https://example.com/storyboard.vtt", // For seek preview
-  textTracks: [
+```tsx
+<StrataPlayer
+  sources={[
+    { name: "HLS Master", url: "master.m3u8", type: "hls" },
+    { name: "Fallback MP4", url: "fallback.mp4", type: "mp4" },
+  ]}
+  poster="https://example.com/poster.jpg"
+  thumbnails="https://example.com/storyboard.vtt" // for hover previews
+  textTracks={[
     {
       kind: "subtitles",
       label: "English",
@@ -165,8 +222,29 @@ const props = {
       srcLang: "en",
       default: true,
     },
-  ],
-};
+  ]}
+/>
+```
+
+### UI & Themes
+
+The player includes 4 professionally designed themes.
+
+| Theme     | Description                                                   |
+| :-------- | :------------------------------------------------------------ |
+| `default` | Clean, modern aesthetic using Inter font.                     |
+| `pixel`   | Retro 8-bit style with sharp edges and "Press Start 2P" font. |
+| `game`    | Cinematic RPG style with serif typography and gold accents.   |
+| `hacker`  | Terminal-inspired look with scanlines and monospaced fonts.   |
+
+Customize further with:
+
+```tsx
+<StrataPlayer
+  theme="game"
+  themeColor="#10b981" // Custom accent color
+  iconSize="medium" // 'small' | 'medium' | 'large'
+/>
 ```
 
 ## ⌨️ Keyboard Shortcuts
@@ -181,24 +259,27 @@ const props = {
 | `Arrow Up`    | Increase Volume   |
 | `Arrow Down`  | Decrease Volume   |
 
-## 🎨 Themes
+## 🛠️ Development
 
-StrataPlayer separates layout from aesthetics. Themes can be switched instantly at runtime via props:
-
-- **Default:** Professional, clean lines using Inter font.
-- **Pixel:** Retro-gaming aesthetic with sharp edges and 8-bit fonts.
-- **Game:** Cinematic RPG style with serif typography and gold accents.
-- **Hacker:** Terminal-inspired aesthetic with scanlines and monospaced fonts.
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the dev server:
+   ```bash
+   npm run dev
+   ```
 
 ## 🤝 Contributing
 
-We welcome contributions that align with our philosophy of performance and modularity.
+Contributions are welcome! Please follow these steps:
 
-1.  Fork the project
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
+1. Fork the repository.
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes.
+4. Push to the branch.
+5. Open a Pull Request.
 
 ## 📄 License
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -6,6 +6,37 @@
     <meta name="theme-color" content="#09090b" />
     <title>StrataPlayer Demo</title>
     <link rel="icon" type="image/png" href="/logo.png" />
+
+    <!-- Robust Global Polyfill for WebTorrent/Node libs -->
+    <script>
+      // Ensure global is window
+      if (typeof global === "undefined") {
+        window.global = window;
+      }
+
+      // Comprehensive process polyfill to prevent 'readable-stream' crashes
+      // specifically targeting the 'process.version.slice' error
+      if (typeof window.process === "undefined") {
+        window.process = {
+          env: {},
+          version: "v16.0.0", // Required by many node libs
+          nextTick: function (cb) {
+            setTimeout(cb, 0);
+          },
+          cwd: function () {
+            return "/";
+          },
+          platform: "browser",
+        };
+      } else {
+        // Patch existing partial polyfill if needed
+        if (!window.process.version) window.process.version = "v16.0.0";
+        if (!window.process.nextTick)
+          window.process.nextTick = function (cb) {
+            setTimeout(cb, 0);
+          };
+      }
+    </script>
 
     <!-- Google Cast SDK -->
     <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
@@ -27,7 +58,14 @@
           "hls.js": "https://esm.sh/hls.js@^1.6.15",
           "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
           "vite": "https://esm.sh/vite@^7.3.1",
-          "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+          "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+          "path": "https://esm.sh/path@^0.12.7",
+          "vite-plugin-dts": "https://esm.sh/vite-plugin-dts@^4.5.4",
+          "url": "https://esm.sh/url@^0.11.4",
+          "mpegts.js": "https://esm.sh/mpegts.js@^1.8.0",
+          "dashjs": "https://esm.sh/dashjs@^5.1.1",
+          "webtorrent": "https://esm.sh/webtorrent@^2.8.5",
+          "vite-plugin-node-polyfills": "https://esm.sh/vite-plugin-node-polyfills@^0.25.0"
         }
       }
     </script>

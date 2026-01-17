@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import dts from 'vite-plugin-dts';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,7 +27,10 @@ export default defineConfig(({ mode }) => {
         lib: {
           entry: {
             index: resolve(__dirname, 'lib.ts'),
-            hls: resolve(__dirname, 'plugins/HlsPlugin.ts')
+            hls: resolve(__dirname, 'plugins/HlsPlugin.ts'),
+            dash: resolve(__dirname, 'plugins/DashPlugin.ts'),
+            mpegts: resolve(__dirname, 'plugins/MpegtsPlugin.ts'),
+            webtorrent: resolve(__dirname, 'plugins/WebTorrentPlugin.ts')
           },
           formats: ['es', 'cjs'],
           fileName: (format, entryName) => {
@@ -40,13 +44,19 @@ export default defineConfig(({ mode }) => {
             'react-dom',
             'react-dom/client',
             'react/jsx-runtime',
-            'hls.js'
+            'hls.js',
+            'dashjs',
+            'mpegts.js',
+            'webtorrent'
           ],
           output: {
             globals: {
               react: 'React',
               'react-dom': 'ReactDOM',
-              'hls.js': 'Hls'
+              'hls.js': 'Hls',
+              'dashjs': 'dashjs',
+              'mpegts.js': 'mpegts',
+              'webtorrent': 'WebTorrent'
             },
             assetFileNames: (assetInfo) => {
               if (assetInfo.name === 'style.css') return 'style.css';
@@ -63,7 +73,16 @@ export default defineConfig(({ mode }) => {
   // 2. Demo Site Build (GitHub Pages)
   if (mode === 'demo') {
     return {
-      plugins: [react()],
+      plugins: [
+        react(),
+        nodePolyfills({
+          globals: {
+            Buffer: true,
+            global: true,
+            process: true,
+          },
+        })
+      ],
       base: '/StrataPlayer/',
       build: {
         outDir: 'dist-site',
@@ -74,7 +93,20 @@ export default defineConfig(({ mode }) => {
 
   // 3. Local Development
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      nodePolyfills({
+        globals: {
+          Buffer: true,
+          global: true,
+          process: true,
+        },
+      })
+    ],
     base: '/',
+    define: {
+      // Sometimes required for older libraries that check strict global
+      global: 'globalThis',
+    }
   };
 });

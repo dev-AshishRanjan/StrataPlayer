@@ -41,7 +41,7 @@ export type PlayerTheme = 'default' | 'pixel' | 'game' | 'hacker';
 
 export interface PlayerSource {
   url: string;
-  type?: 'hls' | 'mp4' | 'webm' | 'dash' | string;
+  type?: 'hls' | 'mp4' | 'webm' | 'dash' | 'mpegts' | 'webtorrent' | string;
   name?: string;
 }
 
@@ -459,6 +459,8 @@ export class StrataCore {
     if (type === 'auto') {
       if (srcObj.url.includes('.m3u8')) type = 'hls';
       else if (srcObj.url.includes('.mpd')) type = 'dash';
+      else if (srcObj.url.includes('.flv') || srcObj.url.includes('.ts')) type = 'mpegts';
+      else if (srcObj.url.startsWith('magnet:') || srcObj.url.includes('.torrent')) type = 'webtorrent';
       else type = 'mp4';
     }
 
@@ -480,7 +482,7 @@ export class StrataCore {
       });
     }
 
-    // If it's standard MP4/WebM, set src directly. Plugins handle HLS/Dash.
+    // If it's standard MP4/WebM, set src directly. Plugins handle HLS/Dash/Mpegts/WebTorrent.
     if (type === 'mp4' || type === 'webm' || type === 'ogg') {
       this.video.src = srcObj.url;
     }
