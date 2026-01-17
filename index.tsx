@@ -1,16 +1,13 @@
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Link, Route, Switch, useLocation, Router } from 'wouter';
+import { useHashLocation } from "wouter/use-hash-location";
 import { Home } from './pages/Home';
 import { Playground } from './pages/Playground';
 import { StrataLogo } from './ui/Icons';
 import './demo.css'; // Import global styles (tailwind base)
 import './index.css'; // Import library styles
-
-// Calculate the base path for routing.
-// We safely access import.meta.env to prevent crashes.
-const envBase = (import.meta as any).env?.BASE_URL;
-const base = envBase ? envBase.replace(/\/$/, '') : '';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
     const [location] = useLocation();
@@ -27,7 +24,8 @@ const NavLink = ({ href, children }: { href: string; children: React.ReactNode }
 
 const App = () => {
     return (
-        <Router base={base}>
+        // Use HashLocation to prevent 404s on GitHub Pages (static host)
+        <Router hook={useHashLocation}>
             <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500/30">
                 {/* Navbar */}
                 <nav className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">

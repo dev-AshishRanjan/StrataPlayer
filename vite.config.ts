@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
   const resolveConfig = {
     alias: {
       'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
+      // Fixes "Class extends value undefined" in streamx/webtorrent
+      'stream': 'readable-stream',
+      'util': 'util',
     }
   };
 
@@ -106,6 +109,9 @@ export default defineConfig(({ mode }) => {
         commonjsOptions: {
           transformMixedEsModules: true, // Important for WebTorrent dependencies
         }
+      },
+      optimizeDeps: {
+        include: ['webtorrent', 'readable-stream', 'util', 'events']
       }
     };
   }
