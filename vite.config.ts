@@ -17,6 +17,18 @@ export default defineConfig(({ mode }) => {
     }
   };
 
+  const commonPlugins = [
+    react(),
+    nodePolyfills({
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+      protocolImports: true, // Allow import 'node:events' etc.
+    })
+  ];
+
   // 1. Library Build (NPM Package)
   // Runs when `vite build --mode lib` is called
   if (mode === 'lib') {
@@ -82,41 +94,28 @@ export default defineConfig(({ mode }) => {
   // 2. Demo Site Build (GitHub Pages)
   if (mode === 'demo') {
     return {
-      plugins: [
-        react(),
-        nodePolyfills({
-          globals: {
-            Buffer: true,
-            global: true,
-            process: true,
-          },
-        })
-      ],
+      plugins: commonPlugins,
       resolve: resolveConfig,
       base: '/StrataPlayer/',
+      define: {
+        global: 'globalThis', // Fixes "global is not defined" in many node libs
+      },
       build: {
         outDir: 'dist-site',
         emptyOutDir: true,
+        commonjsOptions: {
+          transformMixedEsModules: true, // Important for WebTorrent dependencies
+        }
       }
     };
   }
 
   // 3. Local Development
   return {
-    plugins: [
-      react(),
-      nodePolyfills({
-        globals: {
-          Buffer: true,
-          global: true,
-          process: true,
-        },
-      })
-    ],
+    plugins: commonPlugins,
     resolve: resolveConfig,
     base: '/',
     define: {
-      // Sometimes required for older libraries that check strict global
       global: 'globalThis',
     }
   };
