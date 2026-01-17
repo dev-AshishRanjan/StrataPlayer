@@ -35,8 +35,6 @@ export default defineConfig(({ mode }) => {
           },
         },
         rollupOptions: {
-          // Critical: Externalize react-dom/client and jsx-runtime to prevent bundling issues.
-          // We DO NOT externalize lucide-react, so icons are included in the bundle.
           external: [
             'react',
             'react-dom',
@@ -63,11 +61,10 @@ export default defineConfig(({ mode }) => {
   }
 
   // 2. Demo Site Build (GitHub Pages)
-  // Runs when `vite build --mode demo` is called
   if (mode === 'demo') {
     return {
       plugins: [react()],
-      base: '/StrataPlayer/', // Critical for GitHub Pages repo subdirectory
+      base: '/StrataPlayer/',
       build: {
         outDir: 'dist-site',
         emptyOutDir: true,
@@ -76,7 +73,6 @@ export default defineConfig(({ mode }) => {
   }
 
   // 3. Local Development
-  // Runs when `vite` or `vite dev` is called
   return {
     plugins: [react()],
     base: '/',

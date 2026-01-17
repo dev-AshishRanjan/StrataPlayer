@@ -1,10 +1,13 @@
 
 import { StrataCore, IPlugin } from '../core/StrataCore';
-import Hls from 'hls.js';
+import * as HlsModule from 'hls.js';
+
+// Handle environment differences where Hls might be a default export or module export
+const Hls = (HlsModule as any).default || HlsModule;
 
 export class HlsPlugin implements IPlugin {
   name = 'HlsPlugin';
-  private hls: Hls | null = null;
+  private hls: any = null;
   private core: StrataCore | null = null;
 
   init(core: StrataCore) {

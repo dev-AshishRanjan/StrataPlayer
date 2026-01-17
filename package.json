@@ -1,6 +1,6 @@
 {
   "name": "strataplayer",
-  "version": "1.0.7",
+  "version": "1.0.11",
   "description": "A robust, secure, and production-grade video player built for the modern web.",
   "type": "module",
   "main": "./dist/strataplayer.cjs.js",
@@ -11,14 +11,14 @@
   ],
   "exports": {
     ".": {
+      "types": "./dist/lib.d.ts",
       "import": "./dist/strataplayer.es.js",
-      "require": "./dist/strataplayer.cjs.js",
-      "types": "./dist/lib.d.ts"
+      "require": "./dist/strataplayer.cjs.js"
     },
     "./hls": {
+      "types": "./dist/hls.d.ts",
       "import": "./dist/hls.es.js",
-      "require": "./dist/hls.cjs.js",
-      "types": "./dist/plugins/HlsPlugin.d.ts"
+      "require": "./dist/hls.cjs.js"
     },
     "./style.css": "./dist/style.css"
   },
