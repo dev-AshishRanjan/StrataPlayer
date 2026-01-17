@@ -1,5 +1,5 @@
 
-import { EventBus } from './EventBus';
+import { EventBus, EventCallback } from './EventBus';
 import { NanoStore } from './NanoStore';
 import { AudioEngine } from './AudioEngine';
 import React from 'react';
@@ -72,13 +72,17 @@ export interface LayerConfig {
 }
 
 export interface ContextMenuItem {
-  html: string | React.ReactNode;
+  html?: string | React.ReactNode;
   disabled?: boolean;
   icon?: string | React.ReactNode;
   onClick?: (close: () => void) => void;
   click?: (close: () => void) => void; // Alias
-  showBorder?: boolean; // Separator below
   checked?: boolean; // Checkbox style
+
+  // Formatting
+  showBorder?: boolean; // Deprecated in favor of separator item, but kept for compat
+  separator?: boolean; // Render as a divider line
+  isLabel?: boolean; // Render as a category header/label
 }
 
 export interface ControlItem {
@@ -149,6 +153,9 @@ export interface PlayerState {
   aspectRatio: string; // 'default', '16:9', '4:3'
   isAutoSized: boolean; // tracks if autoSize (cover) is currently applied
   isLooping: boolean; // Track loop state reactively
+
+  // UI State reflected in Core
+  controlsVisible: boolean;
 }
 
 export interface StrataConfig {
@@ -240,7 +247,8 @@ export const DEFAULT_STATE: PlayerState = {
   flipState: { horizontal: false, vertical: false },
   aspectRatio: 'default',
   isAutoSized: false,
-  isLooping: false
+  isLooping: false,
+  controlsVisible: true
 };
 
 // Helper to merge Defaults -> LocalStorage -> Config
@@ -292,6 +300,7 @@ export class StrataCore {
   private plugins: Map<string, IPlugin> = new Map();
   private audioEngine: AudioEngine;
   public config: StrataConfig;
+  private resizeObserver: ResizeObserver | null = null;
 
   // Retry Logic
   private retryCount = 0;
@@ -328,6 +337,8 @@ export class StrataCore {
     this.boundFullscreenChange = () => {
       const isFs = !!document.fullscreenElement;
       this.store.setState({ isFullscreen: isFs });
+      this.emit('resize');
+      this.emit(isFs ? 'fullscreen' : 'fullscreen_exit');
 
       // Auto Orientation logic
       if (isFs && this.config.autoOrientation && screen.orientation && 'lock' in screen.orientation) {
@@ -380,40 +391,117 @@ export class StrataCore {
     }
   }
 
+  // --- Instance Properties ---
+
+  get playing() { return !this.video.paused && !this.video.ended && this.video.readyState > 2; }
+
+  get currentTime() { return this.video.currentTime; }
+  set currentTime(val: number) { this.seek(val); }
+
+  get duration() { return this.video.duration || 0; }
+
+  get paused() { return this.video.paused; }
+
+  get volume() { return this.video.volume; }
+  set volume(val: number) { this.setVolume(val); }
+
+  get muted() { return this.video.muted; }
+  set muted(val: boolean) {
+    this.video.muted = val;
+    this.store.setState({ isMuted: val });
+  }
+
+  get playbackRate() { return this.video.playbackRate; }
+  set playbackRate(val: number) { this.video.playbackRate = val; }
+
+  get loop() { return this.video.loop; }
+  set loop(val: boolean) {
+    this.video.loop = val;
+    this.store.setState({ isLooping: val });
+  }
+
+  // --- Instance Methods ---
+
+  forward(seconds: number = 10) { this.skip(seconds); }
+  backward(seconds: number = 10) { this.skip(-seconds); }
+
+  // --- Event API ---
+
+  on(event: string, callback: EventCallback) { return this.events.on(event, callback); }
+  off(event: string, callback: EventCallback) { return this.events.off(event, callback); }
+  emit(event: string, data?: any) { return this.events.emit(event, data); }
+
   private initVideoListeners() {
     const s = (partial: Partial<PlayerState>) => this.store.setState(partial);
 
-    this.video.addEventListener('play', () => s({ isPlaying: true }));
-    this.video.addEventListener('pause', () => s({ isPlaying: false }));
-    this.video.addEventListener('ended', () => s({ isPlaying: false }));
-    this.video.addEventListener('waiting', () => s({ isBuffering: true }));
-    this.video.addEventListener('playing', () => s({ isBuffering: false }));
-    this.video.addEventListener('loadeddata', () => {
-      s({ isBuffering: false });
-      // Success load resets retry count
-      this.retryCount = 0;
-      this.removeNotification('retry');
-      // Clear error if we recovered
-      if (this.store.get().error) {
-        s({ error: null });
-      }
-    });
-    this.video.addEventListener('canplay', () => s({ isBuffering: false }));
+    const events = [
+      'abort', 'canplay', 'canplaythrough', 'durationchange', 'emptied', 'ended', 'error',
+      'loadeddata', 'loadedmetadata', 'loadstart', 'pause', 'play', 'playing', 'progress',
+      'ratechange', 'seeked', 'seeking', 'stalled', 'suspend', 'timeupdate', 'volumechange', 'waiting'
+    ];
 
-    this.video.addEventListener('timeupdate', () => {
-      if (!this.video.seeking) {
-        s({ currentTime: this.video.currentTime });
-      }
+    // Standard video event proxying
+    events.forEach(event => {
+      this.video.addEventListener(event, (e) => {
+        // 1. Emit namespaced event (e.g. video:timeupdate)
+        this.emit(`video:${event}`, e);
+
+        // 2. Emit core events (e.g. play, pause)
+        if (event === 'play') this.emit('play');
+        if (event === 'pause') this.emit('pause');
+        if (event === 'ended') this.emit('ended');
+        if (event === 'error') this.emit('error', this.video.error);
+        if (event === 'seeked') this.emit('seek');
+
+        // 3. Update internal store for UI
+        switch (event) {
+          case 'play': s({ isPlaying: true }); break;
+          case 'pause': s({ isPlaying: false }); break;
+          case 'ended': s({ isPlaying: false }); break;
+
+          case 'waiting':
+            s({ isBuffering: true });
+            this.emit('loading', true);
+            break;
+          case 'playing':
+            s({ isBuffering: false });
+            this.emit('loading', false);
+            break;
+          case 'canplay':
+            s({ isBuffering: false });
+            this.emit('loading', false);
+            break;
+
+          case 'loadeddata':
+            s({ isBuffering: false });
+            this.retryCount = 0;
+            this.removeNotification('retry');
+            if (this.store.get().error) s({ error: null });
+            break;
+          case 'timeupdate':
+            if (!this.video.seeking) s({ currentTime: this.video.currentTime });
+            break;
+          case 'seeked': s({ currentTime: this.video.currentTime }); break;
+          case 'durationchange': s({ duration: this.video.duration }); break;
+          case 'volumechange': s({ volume: this.video.volume, isMuted: this.video.muted }); break;
+          case 'ratechange': s({ playbackRate: this.video.playbackRate }); break;
+          case 'error': this.handleError(); break;
+          case 'progress': this.updateBuffer(); break;
+          case 'enterpictureinpicture': s({ isPip: true }); break;
+          case 'leavepictureinpicture': s({ isPip: false }); break;
+        }
+      });
     });
 
-    this.video.addEventListener('seeked', () => s({ currentTime: this.video.currentTime }));
-    this.video.addEventListener('durationchange', () => s({ duration: this.video.duration }));
-    this.video.addEventListener('volumechange', () => s({ volume: this.video.volume, isMuted: this.video.muted }));
-    this.video.addEventListener('ratechange', () => s({ playbackRate: this.video.playbackRate }));
-    this.video.addEventListener('error', () => this.handleError());
-    this.video.addEventListener('progress', this.updateBuffer.bind(this));
-    this.video.addEventListener('enterpictureinpicture', () => s({ isPip: true }));
-    this.video.addEventListener('leavepictureinpicture', () => s({ isPip: false }));
+    // PiP events are not in the standard list above usually
+    this.video.addEventListener('enterpictureinpicture', () => {
+      s({ isPip: true });
+      this.emit('pip', true);
+    });
+    this.video.addEventListener('leavepictureinpicture', () => {
+      s({ isPip: false });
+      this.emit('pip', false);
+    });
 
     // Global fullscreen listener to catch Esc key or browser button
     document.addEventListener('fullscreenchange', this.boundFullscreenChange);
@@ -435,6 +523,7 @@ export class StrataCore {
     const message = customMessage || error?.message || (error ? `Code ${error.code}` : 'Unknown Error');
 
     this.removeNotification('retry');
+    this.emit('video:error', error); // Emitting video:error separately
 
     if (this.retryCount < this.maxRetries) {
       this.retryCount++;
@@ -468,6 +557,7 @@ export class StrataCore {
       this.removeNotification('retry');
       const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
       this.store.setState({ error: finalMsg });
+      this.emit('error', finalMsg);
     }
   }
 
@@ -528,6 +618,17 @@ export class StrataCore {
       this.video.style.backgroundColor = 'black';
       this.container.appendChild(this.video);
     }
+
+    // Setup Resize Observer
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        this.emit('resize', { width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    this.resizeObserver.observe(this.container);
+
+    // Emit ready event
+    this.emit('ready');
   }
 
   use(plugin: IPlugin) {
@@ -624,6 +725,11 @@ export class StrataCore {
     }
   }
 
+  // Wrapper for external subtitle API
+  public loadSubtitle(url: string, label: string = 'Subtitle') {
+    this.addTextTrackInternal(url, label, undefined, true);
+  }
+
   public addTextTrack(file: File, label: string) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -704,6 +810,13 @@ export class StrataCore {
   setAudioTrack(index: number) {
     this.store.setState({ currentAudioTrack: index });
     this.events.emit('audio-track-request', index);
+  }
+
+  setControlsVisible(visible: boolean) {
+    if (this.store.get().controlsVisible !== visible) {
+      this.store.setState({ controlsVisible: visible });
+      this.emit('control', visible);
+    }
   }
 
   async toggleFullscreen() {
@@ -994,11 +1107,16 @@ export class StrataCore {
 
   destroy() {
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
     document.removeEventListener('fullscreenchange', this.boundFullscreenChange);
     this.video.pause();
     this.video.src = '';
     const oldTracks = this.video.getElementsByTagName('track');
     while (oldTracks.length > 0) oldTracks[0].remove();
+    this.emit('destroy');
     this.events.destroy();
     this.store.destroy();
     this.plugins.forEach(p => p.destroy && p.destroy());

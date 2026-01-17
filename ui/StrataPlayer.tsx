@@ -98,7 +98,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         () => initialState
     );
 
-    const [showControls, setShowControls] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
     const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance' | 'sources' | 'flip' | 'ratio'>('main');
@@ -244,20 +243,25 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     }, [player, useHotKey]);
 
     const handleMouseMove = () => {
+        if (!player) return;
         // Even if locked, we want to wake up controls so the lock button becomes visible
-        setShowControls(true);
+        player.setControlsVisible(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         if (settingsOpen || subtitleMenuOpen) return;
         controlsTimeoutRef.current = setTimeout(() => {
             if (!state.isPlaying || settingsOpen || subtitleMenuOpen) return;
-            setShowControls(false);
+            player.setControlsVisible(false);
         }, 2500);
     };
 
     useEffect(() => {
+        if (!player) return;
         if (!settingsOpen && !subtitleMenuOpen && state.isPlaying) handleMouseMove();
-        else if (settingsOpen || subtitleMenuOpen) { setShowControls(true); if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current); }
-    }, [settingsOpen, subtitleMenuOpen, state.isPlaying]);
+        else if (settingsOpen || subtitleMenuOpen) {
+            player.setControlsVisible(true);
+            if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        }
+    }, [settingsOpen, subtitleMenuOpen, state.isPlaying, player]);
 
     // --- Fast Forward Logic ---
     const startFastForward = useCallback(() => {
@@ -339,6 +343,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!player) return;
+
         // Close menus on outside click
         if (settingsOpen) setSettingsOpen(false);
         if (subtitleMenuOpen) setSubtitleMenuOpen(false);
@@ -346,14 +352,12 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (contextMenu.visible) setContextMenu({ ...contextMenu, visible: false });
 
         // Wake up controls so lock button is visible if locked
-        setShowControls(true);
+        player.setControlsVisible(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         controlsTimeoutRef.current = setTimeout(() => {
             if (!state.isPlaying || settingsOpen || subtitleMenuOpen) return;
-            setShowControls(false);
+            player.setControlsVisible(false);
         }, 2500);
-
-        if (!player) return;
 
         // If locked, do nothing else (prevent play/pause, seek, double tap)
         if (state.isLocked) return;
@@ -461,7 +465,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open. 
     // HIDDEN IF LOCKED.
-    const isControlsVisible = !state.isLocked && (showControls || !state.isPlaying || settingsOpen || subtitleMenuOpen);
+    // Use state.controlsVisible from Core to sync with external listeners (like ArtPlayer consumers)
+    const isControlsVisible = !state.isLocked && (state.controlsVisible || !state.isPlaying || settingsOpen || subtitleMenuOpen);
     const isVolumeVisible = isVolumeHovered || isVolumeScrubbing || isVolumeLocked;
 
     const backdropClass = isBackdrop ? 'backdrop-blur-xl bg-black/80' : 'bg-black/95';
@@ -702,24 +707,35 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     // --- Dynamic Context Menu ---
     const contextMenuItems: ContextMenuItem[] = useMemo(() => {
         const items: ContextMenuItem[] = [
+            // Loop (Playback Group)
+            { html: 'Playback', isLabel: true },
             {
                 html: 'Loop',
                 checked: state.isLooping,
-                onClick: () => player?.toggleLoop(),
-                showBorder: true
+                onClick: () => player?.toggleLoop()
             },
+            { separator: true },
+
+            // Flip (Transform Group)
+            { html: 'Transform', isLabel: true },
             { html: 'Flip Horizontal', onClick: () => player?.setFlip('horizontal') },
-            { html: 'Flip Vertical', onClick: () => player?.setFlip('vertical'), showBorder: true },
-            { html: 'Aspect Ratio', disabled: true, showBorder: false }, // Header
+            { html: 'Flip Vertical', onClick: () => player?.setFlip('vertical') },
+            { separator: true },
+
+            // Aspect Ratio Group
+            { html: 'Aspect Ratio', isLabel: true },
             { html: 'Default', checked: state.aspectRatio === 'default', onClick: () => player?.setAspectRatio('default') },
             { html: '16:9', checked: state.aspectRatio === '16:9', onClick: () => player?.setAspectRatio('16:9') },
-            { html: '4:3', checked: state.aspectRatio === '4:3', onClick: () => player?.setAspectRatio('4:3'), showBorder: true },
+            { html: '4:3', checked: state.aspectRatio === '4:3', onClick: () => player?.setAspectRatio('4:3') },
+            { separator: true },
+
+            // Stats
             {
                 html: 'Video Info',
                 icon: <InfoIcon className="w-3.5 h-3.5" />,
-                onClick: () => setShowVideoInfo(true),
-                showBorder: true
-            }
+                onClick: () => setShowVideoInfo(true)
+            },
+            { separator: true }
         ];
 
         if (config.contextmenu) {
@@ -729,8 +745,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         // Branding
         items.push({
             html: <span className="text-zinc-500 text-xs font-semibold tracking-wide">StrataPlayer</span>,
-            disabled: true,
-            showBorder: true
+            disabled: true
         });
 
         // Always append Close at the very end
@@ -751,7 +766,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
             onMouseMove={handleMouseMove}
-            onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen) setShowControls(false); }}
+            onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen && player) player.setControlsVisible(false); }}
             onMouseDown={startFastForward}
             onMouseUp={stopFastForward}
             onTouchStart={startFastForward}
@@ -913,7 +928,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     )}
 
                     {/* Mobile Lock Button */}
-                    {useLock && showControls && (
+                    {useLock && state.controlsVisible && (
                         <button
                             onClick={(e) => { e.stopPropagation(); player.toggleLock(); }}
                             className={`absolute left-4 md:left-6 bottom-24 md:bottom-28 z-50 p-3 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white transition-all active:scale-95 ${state.isLocked ? 'text-[var(--accent)] bg-white/10' : 'hover:bg-white/10'}`}
@@ -938,9 +953,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
 
                     {/* Center Controls - Hidden if locked */}
-                    {!state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || showControls) && !state.isBuffering) ? (
+                    {!state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || state.controlsVisible) && !state.isBuffering) ? (
                         <div
-                            className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${showControls || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
+                            className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${state.controlsVisible || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         >
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
                                 <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all active:scale-110 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>

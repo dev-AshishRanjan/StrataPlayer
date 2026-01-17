@@ -95,28 +95,46 @@ export const ContextMenu = ({ x, y, items, onClose, containerWidth, containerHei
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {items.map((item, index) => (
-        <React.Fragment key={index}>
-          <button
-            onClick={() => {
-              if (!item.disabled) {
-                if (item.click) item.click(onClose);
-                else if (item.onClick) item.onClick(onClose);
-              }
-            }}
-            disabled={item.disabled}
-            className={`w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-white/10 focus:bg-white/10 focus:outline-none transition-colors text-sm text-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed group my-0.5`}
-            style={{ borderRadius: 'var(--radius)' }}
-          >
-            <div className="flex items-center gap-3 overflow-hidden">
-              {item.icon && <span className="text-zinc-400 w-4 h-4 flex items-center justify-center shrink-0 group-hover:text-zinc-300 transition-colors"><RenderContent content={item.icon} /></span>}
-              <span className={`flex items-center font-medium truncate ${item.checked ? 'text-[var(--accent)]' : ''}`}><RenderContent content={item.html} /></span>
+      {items.map((item, index) => {
+        // Separator Logic: 0 height with top border for a crisp line
+        if (item.separator) {
+          return <div key={index} className="h-0 border-t border-white/10 mx-2 my-1.5" />;
+        }
+
+        // Label Logic
+        if (item.isLabel) {
+          return (
+            <div key={index} className="px-3 py-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider select-none">
+              <RenderContent content={item.html || ''} />
             </div>
-            {item.checked && <CheckIcon className="w-4 h-4 text-[var(--accent)] shrink-0 ml-2" />}
-          </button>
-          {item.showBorder && <div className="h-px bg-white/5 mx-2 my-1" />}
-        </React.Fragment>
-      ))}
+          );
+        }
+
+        // Standard Interactive Item
+        return (
+          <React.Fragment key={index}>
+            <button
+              onClick={() => {
+                if (!item.disabled) {
+                  if (item.click) item.click(onClose);
+                  else if (item.onClick) item.onClick(onClose);
+                }
+              }}
+              disabled={item.disabled}
+              className={`w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-white/10 focus:bg-white/10 focus:outline-none transition-colors text-sm text-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed group my-0.5`}
+              style={{ borderRadius: 'var(--radius)' }}
+            >
+              <div className="flex items-center gap-3 overflow-hidden">
+                {item.icon && <span className="text-zinc-400 w-4 h-4 flex items-center justify-center shrink-0 group-hover:text-zinc-300 transition-colors"><RenderContent content={item.icon} /></span>}
+                <span className={`flex items-center font-medium truncate ${item.checked ? 'text-[var(--accent)]' : ''}`}><RenderContent content={item.html || ''} /></span>
+              </div>
+              {item.checked && <CheckIcon className="w-4 h-4 text-[var(--accent)] shrink-0 ml-2" />}
+            </button>
+            {/* Legacy support for showBorder, though item.separator is preferred now */}
+            {item.showBorder && <div className="h-0 border-t border-white/10 mx-2 my-1" />}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 };
