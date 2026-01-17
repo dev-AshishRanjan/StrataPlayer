@@ -4,7 +4,7 @@
   <img src="https://dev-ashishranjan.github.io/StrataPlayer/logo.png" alt="StrataPlayer Logo" width="128" />
   
   <p align="center">
-    <strong>The Universal Media Engine for the Modern Web.</strong>
+    <strong>A Universal Media Engine for the Web.</strong>
   </p>
   
   <p align="center">
@@ -22,23 +22,23 @@
 
 ## Introduction
 
-StrataPlayer is a production-grade, framework-agnostic media engine designed for the modern web. It decouples playback logic from the UI, ensuring high-performance rendering even during rapid state updates.
+StrataPlayer is a framework-agnostic media engine designed for web applications. It decouples playback logic from the UI, ensuring consistent performance during state updates.
 
-Built on **React 19** and **TypeScript**, it features a modular plugin architecture that allows you to support only the formats you need—keeping your bundle size minimal while offering support for everything from HLS to BitTorrent streaming.
+Built on **React 19** and **TypeScript**, it features a modular plugin architecture to support various streaming formats while keeping the core bundle size minimal.
 
-## ✨ Key Features
+## Key Features
 
 - **Universal Playback:** Support for **HLS**, **DASH**, **MPEG-TS/FLV**, and **WebTorrent** (P2P).
-- **Framework Agnostic:** First-class React support, with easy mounting for Vue, Svelte, Angular, and Vanilla JS.
-- **Robust Network Handling:** Automatic exponential backoff and retry logic for unstable connections.
-- **Advanced Audio Engine:** Integrated Web Audio API nodes for volume boosting (up to 300%) and gain control.
-- **Professional UI:**
-  - **Themes:** 4 built-in distinct themes (Default, Pixel, Game, Hacker).
-  - **Subtitles:** Comprehensive VTT/SRT support with user-customizable styling (size, color, sync, shadows).
-  - **Picture-in-Picture** & **Google Cast** integration.
-- **State Management:** Powered by `NanoStore` for isolated, high-performance state updates.
+- **Framework Agnostic:** First-class React support with mounting helpers for Vue, Svelte, Angular, and Vanilla JS.
+- **Network Handling:** Automatic exponential backoff and retry logic.
+- **Audio Engine:** Integrated Web Audio API nodes for gain control and volume boosting.
+- **UI System:**
+  - 4 built-in themes (Default, Pixel, Game, Hacker).
+  - VTT/SRT subtitle support with user customization.
+  - Picture-in-Picture & Google Cast integration.
+- **State Management:** Powered by `NanoStore` for isolated state updates.
 
-## 🚀 Installation
+## Installation
 
 Install the core player:
 
@@ -62,7 +62,7 @@ npm install mpegts.js
 npm install webtorrent
 ```
 
-## 💻 Usage
+## Usage
 
 ### 1. Basic Usage (React)
 
@@ -141,55 +141,68 @@ const player = mountStrataPlayer(container, {
 // player.unmount();
 ```
 
-## 📋 Component Props
+## Component Props & Options
 
-The `<StrataPlayer />` component accepts the following props:
+The `<StrataPlayer />` component accepts the following configuration options.
 
-| Prop                   | Type                                         | Default     | Description                                                                                |
-| :--------------------- | :------------------------------------------- | :---------- | :----------------------------------------------------------------------------------------- |
-| **src**                | `string`                                     | `undefined` | The primary media URL.                                                                     |
-| **sources**            | `PlayerSource[]`                             | `[]`        | Array of sources for quality fallback or alternative formats. Overrides `src` if provided. |
-| **poster**             | `string`                                     | `undefined` | URL for the poster image shown before playback.                                            |
-| **autoPlay**           | `boolean`                                    | `false`     | Whether to start playback automatically. Note: Browsers may block unmuted autoplay.        |
-| **volume**             | `number`                                     | `1`         | Initial volume (0.0 to 1.0).                                                               |
-| **muted**              | `boolean`                                    | `false`     | Initial mute state.                                                                        |
-| **theme**              | `'default' \| 'pixel' \| 'game' \| 'hacker'` | `'default'` | The visual theme of the player.                                                            |
-| **themeColor**         | `string`                                     | `'#6366f1'` | Primary accent color (Hex, RGB).                                                           |
-| **iconSize**           | `'small' \| 'medium' \| 'large'`             | `'medium'`  | Size of the control icons.                                                                 |
-| **thumbnails**         | `string`                                     | `undefined` | URL to a VTT file containing storyboard thumbnails for hover preview.                      |
-| **textTracks**         | `TextTrackConfig[]`                          | `[]`        | Array of subtitle/caption tracks.                                                          |
-| **plugins**            | `IPlugin[]`                                  | `[]`        | Array of initialized plugin instances (e.g., `new HlsPlugin()`).                           |
-| **disablePersistence** | `boolean`                                    | `false`     | If `true`, prevents saving settings to LocalStorage.                                       |
-| **audioGain**          | `number`                                     | `1`         | Initial audio boost level (e.g., `1.5` for 150%).                                          |
-| **playbackRate**       | `number`                                     | `1`         | Initial playback speed.                                                                    |
+### Source & Playback
 
-### Data Structures
+| Prop             | Type                | Default | Description                                                   |
+| :--------------- | :------------------ | :------ | :------------------------------------------------------------ |
+| **src**          | `string`            | -       | The primary media URL.                                        |
+| **sources**      | `PlayerSource[]`    | `[]`    | Array of sources for quality fallback or alternative formats. |
+| **poster**       | `string`            | -       | URL for the poster image.                                     |
+| **thumbnails**   | `string`            | -       | URL to a VTT file for hover previews.                         |
+| **textTracks**   | `TextTrackConfig[]` | `[]`    | Array of subtitle/caption tracks.                             |
+| **plugins**      | `IPlugin[]`         | `[]`    | Array of initialized plugin instances.                        |
+| **autoPlay**     | `boolean`           | `false` | Start playback automatically.                                 |
+| **loop**         | `boolean`           | `false` | Loop playback.                                                |
+| **volume**       | `number`            | `1`     | Initial volume (0.0 to 1.0).                                  |
+| **muted**        | `boolean`           | `false` | Initial mute state.                                           |
+| **audioGain**    | `number`            | `1`     | Audio boost level (e.g., `1.5` for 150%).                     |
+| **playbackRate** | `number`            | `1`     | Initial playback speed.                                       |
+| **isLive**       | `boolean`           | `false` | Enable live stream UI mode.                                   |
 
-#### `PlayerSource`
+### UI & Appearance
 
-```ts
-{
-  url: string;
-  // Optional: 'hls' | 'dash' | 'mp4' | 'webm' | 'mpegts' | 'webtorrent'
-  // If omitted, the player attempts to detect it from the extension.
-  type?: string;
-  name?: string; // Label for source selector
-}
-```
+| Prop           | Type          | Default     | Description                                      |
+| :------------- | :------------ | :---------- | :----------------------------------------------- |
+| **theme**      | `string`      | `'default'` | `'default'`, `'pixel'`, `'game'`, or `'hacker'`. |
+| **themeColor** | `string`      | `'#6366f1'` | Primary accent color (Hex, RGB).                 |
+| **iconSize**   | `string`      | `'medium'`  | `'small'`, `'medium'`, or `'large'`.             |
+| **backdrop**   | `boolean`     | `true`      | Enable background blur effects in menus.         |
+| **autoSize**   | `boolean`     | `false`     | Toggles `object-fit: cover`.                     |
+| **highlight**  | `Highlight[]` | `[]`        | Markers to display on the timeline.              |
 
-#### `TextTrackConfig`
+### Functionality & Controls
 
-```ts
-{
-  kind: 'subtitles' | 'captions';
-  label: string;  // e.g. "English"
-  src: string;    // URL to .vtt file
-  srcLang: string; // e.g. "en"
-  default?: boolean;
-}
-```
+| Prop                   | Type      | Default | Description                               |
+| :--------------------- | :-------- | :------ | :---------------------------------------- |
+| **hotKey**             | `boolean` | `true`  | Enable keyboard shortcuts.                |
+| **screenshot**         | `boolean` | `false` | Show screenshot button.                   |
+| **pip**                | `boolean` | `true`  | Show Picture-in-Picture button.           |
+| **setting**            | `boolean` | `true`  | Show Settings menu.                       |
+| **fullscreen**         | `boolean` | `true`  | Show Fullscreen button.                   |
+| **fullscreenWeb**      | `boolean` | `false` | Show Web Fullscreen button.               |
+| **flip**               | `boolean` | `true`  | Enable image flip controls in settings.   |
+| **aspectRatio**        | `boolean` | `true`  | Enable aspect ratio controls in settings. |
+| **lock**               | `boolean` | `false` | Show mobile lock button.                  |
+| **fastForward**        | `boolean` | `true`  | Enable long-press to 2x speed.            |
+| **autoOrientation**    | `boolean` | `false` | Lock landscape on mobile fullscreen.      |
+| **disablePersistence** | `boolean` | `false` | Prevent saving settings to LocalStorage.  |
 
-## 🧩 Plugin System
+### Advanced Customization
+
+> Detailed documentation for configuring layers, controls, context menus, and custom settings is available in the full documentation.
+
+| Prop            | Type                | Description                            |
+| :-------------- | :------------------ | :------------------------------------- |
+| **controls**    | `ControlItem[]`     | Custom control bar items.              |
+| **layers**      | `LayerConfig[]`     | Custom UI layers overlaying the video. |
+| **contextmenu** | `ContextMenuItem[]` | Custom right-click menu items.         |
+| **settings**    | `SettingItem[]`     | Custom menu entries.                   |
+
+## Plugin System
 
 StrataPlayer uses a modular system. You only pay the bundle size cost for the formats you use.
 
@@ -200,54 +213,7 @@ StrataPlayer uses a modular system. You only pay the bundle size cost for the fo
 | **MpegtsPlugin**     | `strataplayer/mpegts`     | `mpegts.js`  | MPEG-TS and FLV live streams         |
 | **WebTorrentPlugin** | `strataplayer/webtorrent` | `webtorrent` | P2P streaming via WebRTC             |
 
-## ⚙️ Configuration
-
-### Sources & Tracks
-
-Support multiple sources for quality fallback and detailed subtitle configuration.
-
-```tsx
-<StrataPlayer
-  sources={[
-    { name: "HLS Master", url: "master.m3u8", type: "hls" },
-    { name: "Fallback MP4", url: "fallback.mp4", type: "mp4" },
-  ]}
-  poster="https://example.com/poster.jpg"
-  thumbnails="https://example.com/storyboard.vtt" // for hover previews
-  textTracks={[
-    {
-      kind: "subtitles",
-      label: "English",
-      src: "/subs/en.vtt",
-      srcLang: "en",
-      default: true,
-    },
-  ]}
-/>
-```
-
-### UI & Themes
-
-The player includes 4 professionally designed themes.
-
-| Theme     | Description                                                   |
-| :-------- | :------------------------------------------------------------ |
-| `default` | Clean, modern aesthetic using Inter font.                     |
-| `pixel`   | Retro 8-bit style with sharp edges and "Press Start 2P" font. |
-| `game`    | Cinematic RPG style with serif typography and gold accents.   |
-| `hacker`  | Terminal-inspired look with scanlines and monospaced fonts.   |
-
-Customize further with:
-
-```tsx
-<StrataPlayer
-  theme="game"
-  themeColor="#10b981" // Custom accent color
-  iconSize="medium" // 'small' | 'medium' | 'large'
-/>
-```
-
-## ⌨️ Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Key           | Action            |
 | ------------- | ----------------- |
@@ -259,7 +225,7 @@ Customize further with:
 | `Arrow Up`    | Increase Volume   |
 | `Arrow Down`  | Decrease Volume   |
 
-## 🛠️ Development
+## Development
 
 1. Clone the repository
 2. Install dependencies:
@@ -271,7 +237,7 @@ Customize further with:
    npm run dev
    ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please follow these steps:
 
@@ -281,7 +247,7 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch.
 5. Open a Pull Request.
 
-## 📄 License
+## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
