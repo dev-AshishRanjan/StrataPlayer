@@ -3,13 +3,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { StrataPlayer } from './ui/StrataPlayer';
 import { StrataCore, PlayerState, PlayerSource, StrataConfig, TextTrackConfig } from './core/StrataCore';
-import { HlsPlugin } from './plugins/HlsPlugin';
 
 // Export React Component
 export { StrataPlayer };
 
 // Export Core & Plugins for advanced usage
-export { StrataCore, HlsPlugin };
+export { StrataCore };
 export type { PlayerState, PlayerSource, StrataConfig, TextTrackConfig };
 
 // Export Vanilla JS / Framework Agnostic Mounting Helper

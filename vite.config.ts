@@ -24,9 +24,15 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: 'dist',
         lib: {
-          entry: resolve(__dirname, 'lib.ts'),
-          name: 'StrataPlayer',
-          fileName: (format) => `strataplayer.${format}.js`,
+          entry: {
+            index: resolve(__dirname, 'lib.ts'),
+            hls: resolve(__dirname, 'plugins/HlsPlugin.ts')
+          },
+          formats: ['es', 'cjs'],
+          fileName: (format, entryName) => {
+            if (entryName === 'index') return `strataplayer.${format}.js`;
+            return `${entryName}.${format}.js`;
+          },
         },
         rollupOptions: {
           // Critical: Externalize react-dom/client and jsx-runtime to prevent bundling issues.

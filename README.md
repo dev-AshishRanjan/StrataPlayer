@@ -30,33 +30,36 @@ While the UI layer is powered by the high-performance concurrent rendering of Re
 
 1.  **Universal Compatibility:** Write once, run anywhere. Whether you are building a static HTML site or a complex Next.js application, the implementation remains consistent.
 2.  **State Isolation:** The playback engine runs on a detached state store (`NanoStore`). This allows the player to handle micro-updates (video time, download progress) internally without triggering re-renders in your parent application.
-3.  **Opt-in Complexity:** The core is lightweight. Advanced capabilities like HLS/DASH adaptive streaming, analytics, or casting are treated as plugins, keeping your bundle size strictly minimal unless needed.
+3.  **Modular Architecture:** The core is ultra-lightweight. Heavy dependencies like HLS (`.m3u8`) are entirely opt-in via sub-path imports, keeping your main bundle size minimal.
 
 ## ✨ Features
 
-### Engine & Performance
-
 - **Framework Agnostic:** First-class support for React, with a mounting API for Vue, Svelte, and Vanilla JS.
 - **Resilient Network Handling:** Automatic exponential backoff and retry logic for unstable connections.
-- **Adaptive Streaming:** Native support for HLS (`.m3u8`) and DASH via plugin architecture.
+- **Adaptive Streaming:** Plugin-based support for HLS (powered by `hls.js`).
 - **Audio Boost Engine:** Integrated Web Audio API nodes allowing volume boosting up to 300%.
-
-### Visuals & Interface
-
-- **Themeable System:** 4 built-in distinct themes (Default, Pixel, Game, Hacker) with CSS variable support.
+- **Themeable System:** 4 built-in distinct themes (Default, Pixel, Game, Hacker).
 - **Advanced Subtitles:** DOM-based rendering supporting custom positioning, shadows, and runtime sync adjustment.
-- **Mobile Optimized:** Touch gestures for seeking (double-tap), scrubbing, and volume control.
-- **Google Cast:** Native Chromecast integration.
 
 ## 🚀 Installation
+
+Install the core player:
 
 ```bash
 npm install strataplayer
 ```
 
+If you need HLS support (streaming `.m3u8` files), install the peer dependency:
+
+```bash
+npm install hls.js
+```
+
 ## 💻 Usage
 
-### React
+### 1. React + MP4 (Basic)
+
+For standard video files, simply import the component. No extra plugins required.
 
 ```tsx
 import { StrataPlayer } from "strataplayer";
@@ -64,20 +67,41 @@ import "strataplayer/style.css";
 
 const App = () => {
   return (
-    <div className="player-wrapper">
-      <StrataPlayer
-        src="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
-        theme="default"
-        themeColor="#6366f1"
-      />
-    </div>
+    <StrataPlayer
+      src="https://example.com/video.mp4"
+      theme="default"
+      themeColor="#6366f1"
+    />
   );
 };
 ```
 
-### Vanilla JS / Vue / Svelte / Angular
+### 2. React + HLS (Advanced)
 
-For non-React frameworks, use the `mountStrataPlayer` helper. This mounts the player into a specific DOM node and returns an instance for cleanup and updates.
+To play HLS streams, import the `HlsPlugin` from the sub-path `strataplayer/hls`.
+
+```tsx
+import { StrataPlayer } from "strataplayer";
+import { HlsPlugin } from "strataplayer/hls"; // Import from sub-path
+import "strataplayer/style.css";
+
+// Initialize plugins outside render loop or via useMemo
+const plugins = [new HlsPlugin()];
+
+const App = () => {
+  return (
+    <StrataPlayer
+      src="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+      plugins={plugins}
+      theme="hacker"
+    />
+  );
+};
+```
+
+### 3. Vanilla JS / Vue / Svelte + MP4
+
+For non-React frameworks, use the `mountStrataPlayer` helper.
 
 **index.html**
 
@@ -94,34 +118,42 @@ import "strataplayer/style.css";
 const container = document.getElementById("player-container");
 
 const instance = mountStrataPlayer(container, {
-  src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+  src: "https://example.com/video.mp4",
   autoPlay: false,
-  theme: "hacker",
-  themeColor: "#22c55e",
-  sources: [
-    { name: "HLS Stream", url: "...", type: "hls" },
-    { name: "MP4 Fallback", url: "...", type: "mp4" },
-  ],
+  theme: "game",
 });
 
-// To update props later (e.g., change video):
-// instance.update({ src: 'new-video.mp4' });
-
-// To destroy/cleanup (e.g., in Vue onUnmounted):
+// Cleanup when done
 // instance.unmount();
+```
+
+### 4. Vanilla JS / Vue / Svelte + HLS
+
+Just like in React, import the plugin and pass it in the config object.
+
+```javascript
+import { mountStrataPlayer } from "strataplayer";
+import { HlsPlugin } from "strataplayer/hls";
+import "strataplayer/style.css";
+
+const instance = mountStrataPlayer(document.getElementById("root"), {
+  src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+  plugins: [new HlsPlugin()],
+});
 ```
 
 ## ⚙️ Advanced Configuration
 
 ### Sources & Tracks
 
-StrataPlayer supports complex source arrays and subtitle tracks.
+StrataPlayer supports complex source arrays (for quality fallbacks) and subtitle tracks.
 
 ```javascript
 const props = {
+  // Priority order: HLS -> MP4
   sources: [
-    { name: "1080p HLS", url: "master.m3u8", type: "hls" },
-    { name: "720p MP4", url: "fallback.mp4", type: "mp4" },
+    { name: "Stream", url: "master.m3u8", type: "hls" },
+    { name: "Download", url: "fallback.mp4", type: "mp4" },
   ],
   poster: "https://example.com/poster.jpg",
   thumbnails: "https://example.com/storyboard.vtt", // For seek preview

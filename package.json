@@ -3,7 +3,7 @@
   "version": "1.0.6",
   "description": "A robust, secure, and production-grade video player built for the modern web.",
   "type": "module",
-  "main": "./dist/strataplayer.umd.js",
+  "main": "./dist/strataplayer.cjs.js",
   "module": "./dist/strataplayer.es.js",
   "types": "./dist/lib.d.ts",
   "files": [
@@ -12,8 +12,13 @@
   "exports": {
     ".": {
       "import": "./dist/strataplayer.es.js",
-      "require": "./dist/strataplayer.umd.js",
+      "require": "./dist/strataplayer.cjs.js",
       "types": "./dist/lib.d.ts"
+    },
+    "./hls": {
+      "import": "./dist/hls.es.js",
+      "require": "./dist/hls.cjs.js",
+      "types": "./dist/plugins/HlsPlugin.d.ts"
     },
     "./style.css": "./dist/style.css"
   },
@@ -28,6 +33,11 @@
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0",
     "hls.js": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "hls.js": {
+      "optional": true
+    }
   },
   "dependencies": {
     "lucide-react": "^0.462.0"

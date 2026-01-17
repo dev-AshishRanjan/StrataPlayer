@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { StrataPlayer } from '../ui/StrataPlayer';
 import { PlayIcon } from '../ui/Icons';
+import { HlsPlugin } from '../plugins/HlsPlugin';
 
 export const Playground = () => {
   const [playgroundInput, setPlaygroundInput] = useState('');
@@ -13,6 +14,9 @@ export const Playground = () => {
       setPlaygroundSrc(playgroundInput.trim());
     }
   };
+
+  // Initialize plugins (HLS support for the playground)
+  const plugins = [new HlsPlugin()];
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -45,6 +49,7 @@ export const Playground = () => {
             key={playgroundSrc}
             src={playgroundSrc}
             autoPlay={true}
+            plugins={plugins}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-700 select-none pointer-events-none">

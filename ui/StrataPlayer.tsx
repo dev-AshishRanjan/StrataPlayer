@@ -1,7 +1,6 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
 import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource } from '../core/StrataCore';
-import { HlsPlugin } from '../plugins/HlsPlugin';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
 import { NotificationContainer } from './components/NotificationContainer';
@@ -103,9 +102,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         // Register plugins
         if (plugins && plugins.length > 0) {
             plugins.forEach(p => core.use(p));
-        } else {
-            // Fallback default HLS plugin if none provided (for backward compat)
-            core.use(new HlsPlugin());
         }
 
         core.attach(containerRef.current);
