@@ -13,6 +13,10 @@ export default defineConfig(({ mode }) => {
   // Shared alias config
   const resolveConfig = {
     alias: {
+      // CRITICAL: Webtorrent/streamx requires 'readable-stream' to function in browser.
+      // We apply this globally so it works in Dev, Lib, and Demo modes.
+      stream: 'readable-stream',
+      'readable-stream': 'readable-stream',
       // Shim bittorrent-dht to prevent server-side node-only deps from breaking build
       'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
     }
@@ -109,14 +113,12 @@ export default defineConfig(({ mode }) => {
       plugins: commonPlugins,
       resolve: {
         alias: {
-          stream: 'readable-stream',
-          'readable-stream': 'readable-stream',
+          // Merge shared aliases with demo-specific overrides
+          ...resolveConfig.alias,
           util: 'util',
           events: 'events',
           process: 'process/browser',
           buffer: 'buffer',
-          // your existing shim
-          'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
         },
         dedupe: ['stream', 'readable-stream', 'streamx'],
       },
