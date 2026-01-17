@@ -13,10 +13,8 @@ export default defineConfig(({ mode }) => {
   // Shared alias config to fix webtorrent/bittorrent-dht build issues
   const resolveConfig = {
     alias: {
+      // We still need to shim bittorrent-dht to prevent build errors
       'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
-      // Fixes "Class extends value undefined" in streamx/webtorrent
-      'stream': 'readable-stream',
-      'util': 'util',
     }
   };
 
@@ -28,7 +26,7 @@ export default defineConfig(({ mode }) => {
         global: true,
         process: true,
       },
-      protocolImports: true, // Allow import 'node:events' etc.
+      protocolImports: true, // Allow import 'node:events', 'node:stream' etc.
     })
   ];
 
@@ -109,9 +107,6 @@ export default defineConfig(({ mode }) => {
         commonjsOptions: {
           transformMixedEsModules: true, // Important for WebTorrent dependencies
         }
-      },
-      optimizeDeps: {
-        include: ['webtorrent', 'readable-stream', 'util', 'events']
       }
     };
   }
