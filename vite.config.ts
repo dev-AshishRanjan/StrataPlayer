@@ -1,3 +1,4 @@
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import dts from 'vite-plugin-dts';
@@ -9,6 +10,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig(({ mode }) => {
+  // Shared alias config to fix webtorrent/bittorrent-dht build issues
+  const resolveConfig = {
+    alias: {
+      'bittorrent-dht': resolve(__dirname, 'utils/dht-shim.js'),
+    }
+  };
+
   // 1. Library Build (NPM Package)
   // Runs when `vite build --mode lib` is called
   if (mode === 'lib') {
@@ -21,6 +29,7 @@ export default defineConfig(({ mode }) => {
           rollupTypes: true
         })
       ],
+      resolve: resolveConfig,
       publicDir: false,
       build: {
         outDir: 'dist',
@@ -83,6 +92,7 @@ export default defineConfig(({ mode }) => {
           },
         })
       ],
+      resolve: resolveConfig,
       base: '/StrataPlayer/',
       build: {
         outDir: 'dist-site',
@@ -103,6 +113,7 @@ export default defineConfig(({ mode }) => {
         },
       })
     ],
+    resolve: resolveConfig,
     base: '/',
     define: {
       // Sometimes required for older libraries that check strict global
