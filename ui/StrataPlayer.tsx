@@ -38,6 +38,7 @@ interface StrataPlayerProps extends StrataConfig {
     textTracks?: TextTrackConfig[];
     plugins?: IPlugin[]; // Allow injecting plugins from outside
     autoPlay?: boolean; // Added prop
+    onGetInstance?: (core: StrataCore) => void; // Expose instance
 }
 
 const THEME_COLORS = [
@@ -68,7 +69,7 @@ const HtmlOrNode = ({ content, className, style }: { content: string | React.Rea
 };
 
 export const StrataPlayer = (props: StrataPlayerProps) => {
-    const { src, type, sources, poster, autoPlay, thumbnails, textTracks, plugins, ...config } = props;
+    const { src, type, sources, poster, autoPlay, thumbnails, textTracks, plugins, onGetInstance, ...config } = props;
 
     // Default configs for optionals
     const useScreenshot = config.screenshot ?? false;
@@ -146,6 +147,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
         core.attach(containerRef.current);
         setPlayer(core);
+        if (onGetInstance) onGetInstance(core);
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
