@@ -8,7 +8,7 @@ import { MpegtsPlugin } from '../plugins/MpegtsPlugin';
 import { WebTorrentPlugin } from '../plugins/WebTorrentPlugin';
 import {
   CheckIcon, CopyIcon, MenuIcon, SettingsIcon,
-  ArrowLeftIcon, PlayIcon
+  ArrowLeftIcon, PlayIcon, InfoIcon
 } from '../ui/Icons';
 
 // --- Helper Components ---
@@ -468,38 +468,211 @@ const UiPropsPage = () => (
         example={`<StrataPlayer autoOrientation={true} />`}
       />
     </div>
+  </div>
+);
 
-    <h3 className="text-xl font-bold mt-12 mb-6 text-white border-b border-white/10 pb-2">Custom UI Injection</h3>
+// --- New Component Pages ---
+
+const ControlsPage = () => (
+  <div className="space-y-8 animate-in fade-in duration-500">
+    <h1 className="text-3xl font-bold mb-8">Controls</h1>
+    <p className="text-zinc-400 mb-8">
+      StrataPlayer allows you to inject custom buttons into the control bar. You can position them <code>left</code>, <code>right</code>, or <code>center</code>.
+      Use the <code>index</code> property to order them relative to built-in controls (Play button is index 10).
+    </p>
+
+    <LiveExample
+      code={`<StrataPlayer
+  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+  controls={[
+    {
+      id: 'custom-alert',
+      position: 'right',
+      index: 1, // Place early in right stack
+      html: '★ Click Me',
+      tooltip: 'Show Alert',
+      style: { color: '#6366f1', fontWeight: 'bold', fontSize: '12px' },
+      onClick: (player) => {
+          player.notify({ type: 'success', message: 'You clicked the star!' });
+      }
+    }
+  ]}
+/>`}
+    >
+      <StrataPlayer
+        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        controls={[
+          {
+            id: 'demo-btn',
+            position: 'right',
+            index: 1,
+            html: <div className="flex items-center gap-1 text-[var(--accent)] font-bold text-xs"><InfoIcon className="w-3 h-3" /> Info</div>,
+            tooltip: 'Demo Click',
+            onClick: (player) => player.notify({ type: 'info', message: 'This is a custom control button!' })
+          }
+        ]}
+        theme="default"
+      />
+    </LiveExample>
 
     <PropDoc
       name="controls"
       type="ControlItem[]"
-      description="Inject custom buttons into the control bar."
-      example={`<StrataPlayer\n  controls={[\n    {\n      id: 'my-btn',\n      position: 'right',\n      index: 1,\n      html: '★',\n      tooltip: 'Custom Action',\n      onClick: (player) => alert('Clicked!')\n    }\n  ]}\n/>`}
-    />
-
-    <PropDoc
-      name="settings"
-      type="SettingItem[]"
-      description="Inject custom items into the main settings menu."
-      example={`<StrataPlayer\n  settings={[\n    {\n      html: 'Dark Mode',\n      switch: true,\n      onSwitch: (item) => console.log('Toggled')\n    },\n    {\n      html: 'About',\n      icon: '<svg>...</svg>',\n      onClick: () => alert('StrataPlayer v1')\n    }\n  ]}\n/>`}
-    />
-
-    <PropDoc
-      name="contextmenu"
-      type="ContextMenuItem[]"
-      description="Customize the right-click menu."
-      example={`<StrataPlayer\n  contextmenu={[\n    { \n       html: 'Custom Action', \n       onClick: (close) => { \n         alert('Action!'); \n         close(); \n       } \n    }\n  ]}\n/>`}
-    />
-
-    <PropDoc
-      name="layers"
-      type="LayerConfig[]"
-      description="Add custom overlay layers on top of the video."
-      example={`<StrataPlayer\n  layers={[\n    { \n      html: '<div class="watermark">LOGO</div>',\n      style: { \n        position: 'absolute', \n        top: '20px', \n        right: '20px', \n        opacity: 0.5 \n      }\n    }\n  ]}\n/>`}
+      description="Array of custom control definitions."
+      example={`interface ControlItem {
+  id?: string;
+  position: 'left' | 'right' | 'center';
+  index: number; // Order: 0-100
+  html?: string | ReactNode;
+  tooltip?: string;
+  onClick?: (core: StrataCore) => void;
+  className?: string;
+  style?: CSSProperties;
+}`}
     />
   </div>
 );
+
+const SettingsPage = () => (
+  <div className="space-y-8 animate-in fade-in duration-500">
+    <h1 className="text-3xl font-bold mb-8">Settings Menu</h1>
+    <p className="text-zinc-400 mb-8">
+      Extend the main settings menu with custom items. You can add simple actions or toggle switches.
+    </p>
+
+    <LiveExample
+      code={`<StrataPlayer
+  src="..."
+  settings={[
+    {
+      html: 'Auto-Skip Intro',
+      tooltip: 'Skip opening credits',
+      switch: true,
+      onSwitch: (item) => {
+         console.log('Toggled!', item);
+         return !item.switch; // Return new state to update visual
+      }
+    },
+    {
+      html: 'External Link',
+      icon: '<svg>...</svg>',
+      onClick: () => window.open('https://google.com', '_blank')
+    }
+  ]}
+/>`}
+    >
+      <StrataPlayer
+        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        settings={[
+          {
+            html: 'Demo Toggle',
+            switch: true,
+            onSwitch: (item) => {
+              alert('Toggle clicked!');
+              return !item.switch;
+            }
+          },
+          {
+            html: 'Visit GitHub',
+            onClick: () => window.open('https://github.com/dev-AshishRanjan/StrataPlayer', '_blank')
+          }
+        ]}
+        theme="default"
+      />
+    </LiveExample>
+  </div>
+);
+
+const ContextMenuPage = () => (
+  <div className="space-y-8 animate-in fade-in duration-500">
+    <h1 className="text-3xl font-bold mb-8">Context Menu</h1>
+    <p className="text-zinc-400 mb-8">
+      Customize the right-click menu. You can add labels, separators, and clickable actions.
+    </p>
+
+    <LiveExample
+      code={`<StrataPlayer
+  src="..."
+  contextmenu={[
+    {
+      html: 'Copy Video URL',
+      onClick: (close) => {
+         navigator.clipboard.writeText(window.location.href);
+         close();
+      }
+    },
+    { separator: true },
+    {
+      html: 'Stats for Nerds',
+      disabled: true
+    }
+  ]}
+/>`}
+    >
+      <StrataPlayer
+        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        contextmenu={[
+          {
+            html: 'Custom Action',
+            onClick: (close) => {
+              alert('Right click action!');
+              close();
+            }
+          },
+          { separator: true },
+          {
+            html: 'Disabled Item',
+            disabled: true
+          }
+        ]}
+        theme="default"
+      />
+    </LiveExample>
+  </div>
+);
+
+const LayersPage = () => (
+  <div className="space-y-8 animate-in fade-in duration-500">
+    <h1 className="text-3xl font-bold mb-8">Layers</h1>
+    <p className="text-zinc-400 mb-8">
+      Add custom overlay layers on top of the video player. Useful for watermarks, ads, or custom info panels.
+    </p>
+
+    <LiveExample
+      code={`<StrataPlayer
+  src="..."
+  layers={[
+    {
+      html: '<div style="background:red; color:white; padding:4px 8px; border-radius:4px;">LIVE</div>',
+      style: {
+         position: 'absolute',
+         top: '20px',
+         left: '20px',
+         pointerEvents: 'none'
+      }
+    }
+  ]}
+/>`}
+    >
+      <StrataPlayer
+        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        layers={[
+          {
+            html: <div className="flex items-center gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="text-xs font-bold text-white">REC</span></div>,
+            style: {
+              position: 'absolute',
+              top: '20px',
+              left: '20px',
+              pointerEvents: 'none'
+            }
+          }
+        ]}
+        theme="default"
+      />
+    </LiveExample>
+  </div>
+);
+
 
 const HlsPluginPage = () => (
   <div className="space-y-8 animate-in fade-in duration-500">
@@ -537,17 +710,36 @@ const DashPluginPage = () => (
 
 const MpegtsPluginPage = () => (
   <div className="space-y-8 animate-in fade-in duration-500">
-    <h1 className="text-3xl font-bold">MPEG-TS Plugin</h1>
-    <p className="text-zinc-400">Enables FLV and MPEG-TS live streams.</p>
+    <h1 className="text-3xl font-bold">MPEG-TS / FLV Plugin</h1>
+    <p className="text-zinc-400">
+      Enables playback of HTTP-FLV and MPEG-TS streams using <code>mpegts.js</code>.
+      Ideal for low-latency live streaming.
+    </p>
 
-    {/* Note: We use a placeholder MP4 here to simulate valid rendering because most FLV streams lack CORS for live demos */}
     <LiveExample
-      code={`import { MpegtsPlugin } from 'strataplayer/mpegts';\n\n<StrataPlayer \n  src="https://example.com/live/stream.flv"\n  plugins={[new MpegtsPlugin()]}\n  isLive={true}\n  theme="default"\n/>`}
+      code={`import { MpegtsPlugin } from 'strataplayer/mpegts';
+
+<StrataPlayer
+  src="https://example.com/live/stream.flv"
+  type="flv"
+  isLive={true}
+  plugins={[new MpegtsPlugin()]}
+  onGetInstance={(player) => {
+      // Listen for specific mpegts errors
+      player.on('error', (err) => console.log('Stream offline', err));
+  }}
+/>`}
     >
-      <div className="relative w-full h-full bg-black flex items-center justify-center border border-white/10 rounded-lg">
-        <div className="text-center p-6">
-          <p className="text-zinc-400 text-sm mb-2">Live Preview Requires CORS-enabled FLV Stream</p>
-          <p className="text-xs text-zinc-600">This placeholder demonstrates the layout.</p>
+      {/* Using a visual placeholder since public FLV streams with CORS are rare/unreliable */}
+      <div className="w-full h-full bg-zinc-900 flex items-center justify-center border border-white/10 rounded-lg relative overflow-hidden group aspect-video">
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 backdrop-blur-md border border-white/10">
+              <div className="w-0 h-0 border-l-[20px] border-l-white border-y-[12px] border-y-transparent ml-1"></div>
+            </div>
+            <p className="text-zinc-400 font-mono text-sm">Waiting for live stream...</p>
+            <p className="text-zinc-600 text-xs mt-2">mpegts.js initialized</p>
+          </div>
         </div>
       </div>
     </LiveExample>
@@ -976,6 +1168,15 @@ const NAVIGATION = [
     items: [
       { id: "options-general", label: "General Options", component: GeneralPropsPage },
       { id: "options-ui", label: "UI & Appearance", component: UiPropsPage },
+    ]
+  },
+  {
+    category: "Components",
+    items: [
+      { id: "component-controls", label: "Controls", component: ControlsPage },
+      { id: "component-settings", label: "Settings", component: SettingsPage },
+      { id: "component-contextmenu", label: "Context Menu", component: ContextMenuPage },
+      { id: "component-layers", label: "Layers", component: LayersPage },
     ]
   },
   {
