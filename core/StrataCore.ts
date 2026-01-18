@@ -197,7 +197,7 @@ export interface StrataConfig {
   lock?: boolean; // Mobile lock button
   gesture?: boolean; // Mobile gestures
   fastForward?: boolean; // Long press
-  autoOrientation?: boolean; // Mobile landscape lock
+  autoOrientation?: boolean; // Mobile landscape lock (default: true)
 
   // Phase 2: Customization
   layers?: LayerConfig[];
@@ -318,6 +318,9 @@ export class StrataCore {
 
   constructor(config: StrataConfig = {}, videoElement?: HTMLVideoElement) {
     this.config = config;
+    // Set Default for AutoOrientation to True
+    this.config.autoOrientation = this.config.autoOrientation ?? true;
+
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
 
@@ -370,6 +373,7 @@ export class StrataCore {
     }
 
     this.initVideoListeners();
+    this.initMediaSession();
     this.initCast();
 
     // Persistence Subscriber
@@ -455,9 +459,18 @@ export class StrataCore {
 
         // 3. Update internal store for UI
         switch (event) {
-          case 'play': s({ isPlaying: true }); break;
-          case 'pause': s({ isPlaying: false }); break;
-          case 'ended': s({ isPlaying: false }); break;
+          case 'play':
+            s({ isPlaying: true });
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+            break;
+          case 'pause':
+            s({ isPlaying: false });
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+            break;
+          case 'ended':
+            s({ isPlaying: false });
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+            break;
 
           case 'waiting':
             s({ isBuffering: true });
@@ -478,13 +491,23 @@ export class StrataCore {
             this.removeNotification('retry');
             if (this.store.get().error) s({ error: null });
             break;
+          case 'loadedmetadata':
+            this.updateMediaSessionMetadata();
+            break;
           case 'timeupdate':
             if (!this.video.seeking) s({ currentTime: this.video.currentTime });
+            this.updateMediaSessionPosition();
             break;
           case 'seeked': s({ currentTime: this.video.currentTime }); break;
-          case 'durationchange': s({ duration: this.video.duration }); break;
+          case 'durationchange':
+            s({ duration: this.video.duration });
+            this.updateMediaSessionPosition();
+            break;
           case 'volumechange': s({ volume: this.video.volume, isMuted: this.video.muted }); break;
-          case 'ratechange': s({ playbackRate: this.video.playbackRate }); break;
+          case 'ratechange':
+            s({ playbackRate: this.video.playbackRate });
+            this.updateMediaSessionPosition();
+            break;
           case 'error': this.handleError(); break;
           case 'progress': this.updateBuffer(); break;
           case 'enterpictureinpicture': s({ isPip: true }); break;
@@ -508,6 +531,76 @@ export class StrataCore {
 
     this.video.textTracks.addEventListener('addtrack', this.updateSubtitles.bind(this));
     this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
+  }
+
+  // --- Media Session API ---
+
+  private initMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+
+    const ms = navigator.mediaSession;
+
+    ms.setActionHandler('play', () => this.play());
+    ms.setActionHandler('pause', () => this.pause());
+    ms.setActionHandler('seekbackward', (details) => this.skip(details.seekOffset ? -details.seekOffset : -10));
+    ms.setActionHandler('seekforward', (details) => this.skip(details.seekOffset || 10));
+    ms.setActionHandler('seekto', (details) => {
+      if (details.seekTime !== undefined) this.seek(details.seekTime);
+    });
+    ms.setActionHandler('stop', () => {
+      this.pause();
+      this.seek(0);
+    });
+    // Playlist controls
+    ms.setActionHandler('previoustrack', () => {
+      const idx = this.store.get().currentSourceIndex;
+      if (idx > 0) this.switchSource(idx - 1);
+    });
+    ms.setActionHandler('nexttrack', () => {
+      const idx = this.store.get().currentSourceIndex;
+      const total = this.store.get().sources.length;
+      if (idx < total - 1) this.switchSource(idx + 1);
+    });
+  }
+
+  private updateMediaSessionMetadata() {
+    if (!('mediaSession' in navigator)) return;
+
+    const title = this.currentSource?.name || this.currentSource?.url.split('/').pop() || 'Video';
+
+    // Determine logo absolute path for artwork
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+    const logoPath = `${base}logo.png`.replace(/\/\//g, '/'); // cleanup double slashes
+    const logoUrl = `${origin}${logoPath}`;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: title,
+      artist: 'StrataPlayer',
+      artwork: [
+        { src: logoUrl, sizes: '512x512', type: 'image/png' }
+      ]
+    });
+  }
+
+  private updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator)) return;
+
+    const duration = this.video.duration;
+    const position = this.video.currentTime;
+    const playbackRate = this.video.playbackRate;
+
+    if (!isNaN(duration) && isFinite(duration) && !isNaN(position)) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration,
+          playbackRate,
+          position: Math.min(position, duration)
+        });
+      } catch (e) {
+        // Ignore errors (e.g. duration too large or position out of sync slightly)
+      }
+    }
   }
 
   public triggerError(message: string, isFatal: boolean = false) {
@@ -593,14 +686,20 @@ export class StrataCore {
 
   // --- Utility ---
 
-  async fetchWithRetry(url: string, retries = 3): Promise<Response> {
+  async fetchWithRetry(url: string, retries = 3, timeout = 20000): Promise<Response> {
     for (let i = 0; i < retries; i++) {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res;
-      } catch (e) {
+      } catch (e: any) {
+        clearTimeout(id);
         if (i === retries - 1) throw e;
+        // If it's an abort error, warn
+        if (e.name === 'AbortError') console.warn(`Fetch timeout (${timeout}ms) for ${url}`);
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
       }
     }
@@ -690,6 +789,9 @@ export class StrataCore {
       // subtitleTracks and currentSubtitle are purposely preserved
       currentSourceIndex: index
     });
+
+    // Update Metadata early
+    this.updateMediaSessionMetadata();
 
     // Determine type if auto
     let type = srcObj.type || 'auto';

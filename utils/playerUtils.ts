@@ -8,13 +8,17 @@ export const formatTime = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const fetchVttWithRetry = async (url: string, retries = 3): Promise<string> => {
+const fetchVttWithRetry = async (url: string, retries = 3, timeout = 20000): Promise<string> => {
   for (let i = 0; i < retries; i++) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(id);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.text();
-    } catch (e) {
+    } catch (e: any) {
+      clearTimeout(id);
       if (i === retries - 1) throw e;
       await new Promise(r => setTimeout(r, 1000));
     }

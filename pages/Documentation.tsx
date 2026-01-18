@@ -463,9 +463,9 @@ const UiPropsPage = () => (
       <PropDoc
         name="autoOrientation"
         type="boolean"
-        defaultValue="false"
+        defaultValue="true"
         description="Attempts to lock mobile screen to landscape when fullscreen."
-        example={`<StrataPlayer autoOrientation={true} />`}
+        example={`<StrataPlayer autoOrientation={false} />`}
       />
     </div>
   </div>

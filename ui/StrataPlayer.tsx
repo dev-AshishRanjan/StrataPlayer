@@ -83,6 +83,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const useAspectRatio = config.aspectRatio ?? true;
     const useHotKey = config.hotKey ?? true;
     const isBackdrop = config.backdrop ?? true;
+    // Default AutoOrientation to true
+    const useAutoOrientation = config.autoOrientation ?? true;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);

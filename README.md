@@ -188,7 +188,7 @@ The `<StrataPlayer />` component accepts the following configuration options.
 | **aspectRatio**        | `boolean` | `true`  | Enable aspect ratio controls in settings. |
 | **lock**               | `boolean` | `false` | Show mobile lock button.                  |
 | **fastForward**        | `boolean` | `true`  | Enable long-press to 2x speed.            |
-| **autoOrientation**    | `boolean` | `false` | Lock landscape on mobile fullscreen.      |
+| **autoOrientation**    | `boolean` | `true`  | Lock landscape on mobile fullscreen.      |
 | **disablePersistence** | `boolean` | `false` | Prevent saving settings to LocalStorage.  |
 
 ### Advanced Customization
