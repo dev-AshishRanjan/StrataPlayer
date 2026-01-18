@@ -462,6 +462,7 @@ export class StrataCore {
           case 'play':
             s({ isPlaying: true });
             if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+            this.updateMediaSessionPosition();
             break;
           case 'pause':
             s({ isPlaying: false });
@@ -493,12 +494,16 @@ export class StrataCore {
             break;
           case 'loadedmetadata':
             this.updateMediaSessionMetadata();
+            this.updateMediaSessionPosition();
             break;
           case 'timeupdate':
             if (!this.video.seeking) s({ currentTime: this.video.currentTime });
             this.updateMediaSessionPosition();
             break;
-          case 'seeked': s({ currentTime: this.video.currentTime }); break;
+          case 'seeked':
+            s({ currentTime: this.video.currentTime });
+            this.updateMediaSessionPosition();
+            break;
           case 'durationchange':
             s({ duration: this.video.duration });
             this.updateMediaSessionPosition();
@@ -593,12 +598,12 @@ export class StrataCore {
     if (!isNaN(duration) && isFinite(duration) && !isNaN(position)) {
       try {
         navigator.mediaSession.setPositionState({
-          duration,
+          duration: Math.max(0, duration),
           playbackRate,
-          position: Math.min(position, duration)
+          position: Math.max(0, Math.min(position, duration)) // Ensure within [0, duration]
         });
       } catch (e) {
-        // Ignore errors (e.g. duration too large or position out of sync slightly)
+        console.warn("MediaSession Position Error:", e);
       }
     }
   }
