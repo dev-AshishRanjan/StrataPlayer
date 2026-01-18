@@ -8,7 +8,8 @@ import { MpegtsPlugin } from '../plugins/MpegtsPlugin';
 import { WebTorrentPlugin } from '../plugins/WebTorrentPlugin';
 import {
   CheckIcon, CopyIcon, MenuIcon, SettingsIcon,
-  ArrowLeftIcon, PlayIcon, InfoIcon
+  ArrowLeftIcon, PlayIcon, InfoIcon, FastForwardIcon,
+  CustomizeIcon, WebFullscreenIcon, PaletteIcon, LockIcon
 } from '../ui/Icons';
 
 // --- Helper Components ---
@@ -111,21 +112,89 @@ const InstanceIntro = () => (
 // --- Pages ---
 
 const IntroPage = () => (
-  <div className="space-y-6 animate-in fade-in duration-500">
-    <h1 className="text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">Introduction</h1>
-    <p className="text-lg text-zinc-300 leading-relaxed">
-      StrataPlayer is a production-grade, universal media player for React.
-      It is designed to handle complex streaming needs (HLS, DASH, P2P) while maintaining a lightweight core.
-    </p>
-    <div className="grid md:grid-cols-2 gap-4 mt-8">
-      <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-        <h3 className="font-bold text-white mb-2 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Zero Config</h3>
-        <p className="text-sm text-zinc-400">Works out of the box for MP4. Plugins are auto-detected for advanced formats.</p>
+  <div className="space-y-12 animate-in fade-in duration-500">
+    <div className="space-y-6">
+      <h1 className="text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-zinc-200 to-zinc-500">
+        StrataPlayer
+      </h1>
+      <p className="text-xl text-zinc-300 leading-relaxed max-w-4xl">
+        StrataPlayer is a <strong>universal media engine</strong> designed for the modern web.
+        It abstracts the complexities of adaptive streaming, browser inconsistencies, and state management into a unified, robust API.
+      </p>
+      <p className="text-zinc-400 leading-relaxed max-w-4xl">
+        Unlike simple wrappers around the HTML5 video tag, StrataPlayer acts as an orchestrator. It manages the entire playback lifecycle,
+        from network negotiation and buffering strategies to audio context manipulation and UI synchronization.
+        Built with performance as a first principle, it ensures that your application remains responsive even during high-bitrate 4K playback.
+      </p>
+    </div>
+
+    <div className="grid md:grid-cols-2 gap-6">
+      <div className="p-8 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-colors">
+        <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mb-4 text-indigo-400">
+          <FastForwardIcon className="w-6 h-6 fill-current" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-3">Performance Architecture</h3>
+        <p className="text-sm text-zinc-400 leading-relaxed">
+          We use a decoupled state management system powered by <strong>NanoStores</strong>.
+          Playback events (like time updates) occur independently of the React render cycle.
+          This isolation prevents heavy re-renders, ensuring 60fps UI performance even on mobile devices.
+        </p>
       </div>
-      <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-        <h3 className="font-bold text-white mb-2 flex items-center gap-2"><ArrowLeftIcon className="w-4 h-4" /> State Isolation</h3>
-        <p className="text-sm text-zinc-400">Uses NanoStore to prevent React re-renders from stalling playback.</p>
+
+      <div className="p-8 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-colors">
+        <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4 text-emerald-400">
+          <CustomizeIcon className="w-6 h-6" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-3">Modular Ecosystem</h3>
+        <p className="text-sm text-zinc-400 leading-relaxed">
+          The core player is ultra-lightweight. Support for complex formats like <strong>HLS, DASH, MPEG-TS, and WebTorrent</strong>
+          is injected via plugins. You only ship the code your users actually need, keeping your bundle size minimal.
+        </p>
       </div>
+
+      <div className="p-8 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-colors">
+        <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center mb-4 text-rose-400">
+          <LockIcon className="w-6 h-6" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-3">Robust & Resilient</h3>
+        <p className="text-sm text-zinc-400 leading-relaxed">
+          Network instability is handled automatically. The player features <strong>exponential backoff retry logic</strong>,
+          automatic source failover, and comprehensive error recovery. It is designed to keep playing when others fail.
+        </p>
+      </div>
+
+      <div className="p-8 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-colors">
+        <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-4 text-amber-400">
+          <WebFullscreenIcon className="w-6 h-6" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-3">Universal Compatibility</h3>
+        <p className="text-sm text-zinc-400 leading-relaxed">
+          While StrataPlayer provides a first-class React component, the core engine is <strong>framework agnostic</strong>.
+          It mounts seamlessly into Vue, Svelte, Angular, or Vanilla JS environments, making it a "write once, run everywhere" solution for media.
+        </p>
+      </div>
+    </div>
+
+    <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-8">
+      <h3 className="text-lg font-bold text-white mb-4">Why StrataPlayer?</h3>
+      <ul className="space-y-3">
+        <li className="flex items-start gap-3 text-zinc-400 text-sm">
+          <CheckIcon className="w-5 h-5 text-indigo-500 shrink-0" />
+          <span><strong>Audio Engine:</strong> Integrated Web Audio API context allows for software volume boosting (up to 300%) and real-time audio analysis.</span>
+        </li>
+        <li className="flex items-start gap-3 text-zinc-400 text-sm">
+          <CheckIcon className="w-5 h-5 text-indigo-500 shrink-0" />
+          <span><strong>Mobile Optimized:</strong> Built-in gesture controls, orientation locking, and touch-friendly interfaces ensure a native app-like experience.</span>
+        </li>
+        <li className="flex items-start gap-3 text-zinc-400 text-sm">
+          <CheckIcon className="w-5 h-5 text-indigo-500 shrink-0" />
+          <span><strong>Developer Experience:</strong> Full TypeScript support with strictly typed events and state. Comprehensive documentation and zero-config defaults.</span>
+        </li>
+        <li className="flex items-start gap-3 text-zinc-400 text-sm">
+          <CheckIcon className="w-5 h-5 text-indigo-500 shrink-0" />
+          <span><strong>Accessibility:</strong> Full keyboard navigation support, ARIA labels, and screen reader compatibility.</span>
+        </li>
+      </ul>
     </div>
   </div>
 );
