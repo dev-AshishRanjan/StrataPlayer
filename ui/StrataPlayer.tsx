@@ -83,6 +83,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const useAspectRatio = config.aspectRatio ?? true;
     const useHotKey = config.hotKey ?? true;
     const isBackdrop = config.backdrop ?? true;
+    const useGestureSeek = config.gestureSeek ?? false;
+    const useCenterControls = config.centerControls ?? true;
+    const fetchTimeout = config.fetchTimeout ?? 30000;
+
     // Default AutoOrientation to true
     const useAutoOrientation = config.autoOrientation ?? true;
 
@@ -131,6 +135,11 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [isFastForwarding, setIsFastForwarding] = useState(false);
     const fastForwardTimerRef = useRef<any>(null);
     const originalRateRef = useRef<number>(1);
+
+    // Gesture Refs
+    const touchStartX = useRef<number | null>(null);
+    const touchStartTime = useRef<number>(0);
+    const isDraggingRef = useRef(false);
 
     const clickTimeoutRef = useRef<any>(null);
     const controlsTimeoutRef = useRef<any>(null);
@@ -211,9 +220,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     useEffect(() => {
         if (thumbnails && player) {
-            parseVTT(thumbnails, player.notify.bind(player)).then(setCues => setThumbnailCues(setCues));
+            parseVTT(thumbnails, player.notify.bind(player), fetchTimeout).then(setCues => setThumbnailCues(setCues));
         } else setThumbnailCues([]);
-    }, [thumbnails, player]);
+    }, [thumbnails, player, fetchTimeout]);
 
     // Safety cleanup for seek animation if onAnimationEnd fails
     useEffect(() => {
@@ -285,6 +294,58 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
     }, [isFastForwarding, player]);
 
+    // --- Gesture Seek Logic ---
+    const handleTouchStart = (e: React.TouchEvent) => {
+        startFastForward();
+
+        if (useGestureSeek && !state.isLocked) {
+            touchStartX.current = e.touches[0].clientX;
+            touchStartTime.current = state.currentTime;
+            isDraggingRef.current = false;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (state.isLocked) return;
+
+        // If we are moving and gesture seek is enabled
+        if (useGestureSeek && touchStartX.current !== null) {
+            const deltaX = e.touches[0].clientX - touchStartX.current;
+
+            // Threshold to start dragging
+            if (Math.abs(deltaX) > 10) {
+                // If we start dragging, cancel any pending fast forward
+                stopFastForward();
+
+                isDraggingRef.current = true;
+                setIsScrubbing(true);
+
+                if (containerRef.current && state.duration) {
+                    const rect = containerRef.current.getBoundingClientRect();
+                    // Sensitivity: map drag distance to timeline progress directly relative to container width
+                    const deltaRatio = deltaX / rect.width;
+                    const newTime = Math.max(0, Math.min(state.duration, touchStartTime.current + (deltaRatio * state.duration)));
+                    setScrubbingTime(newTime);
+                }
+            }
+        }
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        stopFastForward();
+
+        if (useGestureSeek && isDraggingRef.current) {
+            player?.seek(scrubbingTime);
+            setIsScrubbing(false);
+            isDraggingRef.current = false;
+            touchStartX.current = null;
+            // Prevent subsequent click event from toggling play
+            return;
+        }
+
+        touchStartX.current = null;
+    };
+
     const calculateTimeFromEvent = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
         if (!progressBarRef.current || !state.duration) return 0;
         const rect = progressBarRef.current.getBoundingClientRect();
@@ -348,6 +409,12 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!player) return;
+
+        // If we just finished a drag gesture, ignore the click
+        if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            return;
+        }
 
         // Close menus on outside click
         if (settingsOpen) setSettingsOpen(false);
@@ -771,10 +838,16 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen && player) player.setControlsVisible(false); }}
+
+            // Mouse Events
             onMouseDown={startFastForward}
             onMouseUp={stopFastForward}
-            onTouchStart={startFastForward}
-            onTouchEnd={stopFastForward}
+
+            // Touch Events (Unified Gesture Logic)
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+
             onContextMenu={handleContextMenu}
             tabIndex={0}
             role="region"
@@ -956,8 +1029,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
                     {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
 
-                    {/* Center Controls - Hidden if locked */}
-                    {!state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || state.controlsVisible) && !state.isBuffering) ? (
+                    {/* Center Controls - Hidden if locked or configured off */}
+                    {useCenterControls && !state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || state.controlsVisible) && !state.isBuffering) ? (
                         <div
                             className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${state.controlsVisible || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         >

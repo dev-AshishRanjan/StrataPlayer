@@ -171,6 +171,7 @@ export interface StrataConfig {
   loop?: boolean;
   playsInline?: boolean;
   isLive?: boolean;
+  fetchTimeout?: number; // Default 30000ms
 
   // Appearance
   theme?: PlayerTheme;
@@ -191,11 +192,13 @@ export interface StrataConfig {
   flip?: boolean;
   aspectRatio?: boolean;
   highlight?: Highlight[];
+  centerControls?: boolean; // Default true
 
   // Controls / Mobile
   hotKey?: boolean;
   lock?: boolean; // Mobile lock button
   gesture?: boolean; // Mobile gestures
+  gestureSeek?: boolean; // Drag to seek on mobile. Default false.
   fastForward?: boolean; // Long press
   autoOrientation?: boolean; // Mobile landscape lock (default: true)
 
@@ -210,7 +213,7 @@ export interface StrataConfig {
   disablePersistence?: boolean;
 }
 
-const STORAGE_KEY = 'strata-settings-v3';
+const STORAGE_KEY = 'strata-settings';
 
 export const DEFAULT_STATE: PlayerState = {
   isPlaying: false,
@@ -318,8 +321,11 @@ export class StrataCore {
 
   constructor(config: StrataConfig = {}, videoElement?: HTMLVideoElement) {
     this.config = config;
-    // Set Default for AutoOrientation to True
+    // Set Defaults
     this.config.autoOrientation = this.config.autoOrientation ?? true;
+    this.config.fetchTimeout = this.config.fetchTimeout ?? 30000;
+    this.config.centerControls = this.config.centerControls ?? true;
+    this.config.gestureSeek = this.config.gestureSeek ?? false;
 
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
@@ -691,10 +697,11 @@ export class StrataCore {
 
   // --- Utility ---
 
-  async fetchWithRetry(url: string, retries = 3, timeout = 20000): Promise<Response> {
+  async fetchWithRetry(url: string, retries = 3, timeout?: number): Promise<Response> {
+    const effectiveTimeout = timeout ?? this.config.fetchTimeout ?? 30000;
     for (let i = 0; i < retries; i++) {
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), timeout);
+      const id = setTimeout(() => controller.abort(), effectiveTimeout);
       try {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(id);
@@ -704,7 +711,7 @@ export class StrataCore {
         clearTimeout(id);
         if (i === retries - 1) throw e;
         // If it's an abort error, warn
-        if (e.name === 'AbortError') console.warn(`Fetch timeout (${timeout}ms) for ${url}`);
+        if (e.name === 'AbortError') console.warn(`Fetch timeout (${effectiveTimeout}ms) for ${url}`);
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
       }
     }

@@ -36,9 +36,9 @@ export interface ThumbnailCue {
   h: number;
 }
 
-export const parseVTT = async (url: string, notify: (msg: any) => void): Promise<ThumbnailCue[]> => {
+export const parseVTT = async (url: string, notify: (msg: any) => void, timeout: number = 20000): Promise<ThumbnailCue[]> => {
   try {
-    const text = await fetchVttWithRetry(url);
+    const text = await fetchVttWithRetry(url, 3, timeout);
     const lines = text.split('\n');
     const cues: ThumbnailCue[] = [];
     let start: number | null = null;
