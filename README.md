@@ -162,6 +162,7 @@ The `<StrataPlayer />` component accepts the following configuration options.
 | **audioGain**    | `number`            | `1`     | Audio boost level (e.g., `1.5` for 150%).                     |
 | **playbackRate** | `number`            | `1`     | Initial playback speed.                                       |
 | **isLive**       | `boolean`           | `false` | Enable live stream UI mode.                                   |
+| **fetchTimeout** | `number`            | `30000` | Timeout (ms) for network requests (HLS segments, VTT, etc).   |
 
 ### UI & Appearance
 
@@ -190,6 +191,8 @@ The `<StrataPlayer />` component accepts the following configuration options.
 | **fastForward**        | `boolean` | `true`  | Enable long-press to 2x speed.            |
 | **autoOrientation**    | `boolean` | `true`  | Lock landscape on mobile fullscreen.      |
 | **disablePersistence** | `boolean` | `false` | Prevent saving settings to LocalStorage.  |
+| **centerControls**     | `boolean` | `true`  | Show large center play/pause buttons.     |
+| **gestureSeek**        | `boolean` | `false` | Enable drag-to-seek on touch devices.     |
 
 ### Advanced Customization
 

@@ -389,6 +389,14 @@ const GeneralPropsPage = () => (
     />
 
     <PropDoc
+      name="fetchTimeout"
+      type="number"
+      defaultValue="30000"
+      description="Timeout in milliseconds for network requests (video segments, subtitles, thumbnails)."
+      example={`<StrataPlayer\n  src="..."\n  fetchTimeout={15000} // 15 seconds\n/>`}
+    />
+
+    <PropDoc
       name="disablePersistence"
       type="boolean"
       defaultValue="false"
@@ -535,6 +543,20 @@ const UiPropsPage = () => (
         defaultValue="true"
         description="Attempts to lock mobile screen to landscape when fullscreen."
         example={`<StrataPlayer autoOrientation={false} />`}
+      />
+      <PropDoc
+        name="centerControls"
+        type="boolean"
+        defaultValue="true"
+        description="Shows the large Play/Pause and Skip buttons in the center of the screen."
+        example={`<StrataPlayer centerControls={false} />`}
+      />
+      <PropDoc
+        name="gestureSeek"
+        type="boolean"
+        defaultValue="false"
+        description="Enables drag-to-seek gestures anywhere on the video player (mobile optimized)."
+        example={`<StrataPlayer gestureSeek={true} />`}
       />
     </div>
   </div>
