@@ -1,15 +1,45 @@
+
 import './index.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { StrataPlayer } from './ui/StrataPlayer';
-import { StrataCore, PlayerState, PlayerSource, StrataConfig, TextTrackConfig } from './core/StrataCore';
+import {
+  StrataCore,
+  PlayerState,
+  PlayerSource,
+  StrataConfig,
+  TextTrackConfig,
+  IPlugin,
+  SubtitleSettings,
+  PlayerTheme,
+  Highlight,
+  LayerConfig,
+  ContextMenuItem,
+  ControlItem,
+  SettingItem,
+  Notification
+} from './core/StrataCore';
 
 // Export React Component
 export { StrataPlayer };
 
 // Export Core & Plugins for advanced usage
 export { StrataCore };
-export type { PlayerState, PlayerSource, StrataConfig, TextTrackConfig };
+export type {
+  PlayerState,
+  PlayerSource,
+  StrataConfig,
+  TextTrackConfig,
+  IPlugin,
+  SubtitleSettings,
+  PlayerTheme,
+  Highlight,
+  LayerConfig,
+  ContextMenuItem,
+  ControlItem,
+  SettingItem,
+  Notification
+};
 
 // Export Vanilla JS / Framework Agnostic Mounting Helper
 export interface StrataPlayerInstance {
