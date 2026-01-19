@@ -171,6 +171,7 @@ export interface StrataConfig {
   loop?: boolean;
   playsInline?: boolean;
   isLive?: boolean;
+  poster?: string; // Added to Config for Core access
   fetchTimeout?: number; // Default 30000ms
 
   // Appearance
@@ -579,18 +580,22 @@ export class StrataCore {
 
     const title = this.currentSource?.name || this.currentSource?.url.split('/').pop() || 'Video';
 
-    // Determine logo absolute path for artwork
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
-    const logoPath = `${base}logo.png`.replace(/\/\//g, '/'); // cleanup double slashes
-    const logoUrl = `${origin}${logoPath}`;
+    const artwork = [];
+
+    // 1. Prioritize configured poster or source-specific poster
+    if (this.config.poster) {
+      artwork.push({ src: this.config.poster, sizes: '512x512', type: 'image/jpeg' });
+    }
+
+    // 2. Fallback to relative logo path.
+    // This avoids using import.meta.env.BASE_URL which crashes in some environments.
+    // The browser resolves this relative to the current document's base URL.
+    artwork.push({ src: 'logo.png', sizes: '512x512', type: 'image/png' });
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: title,
       artist: 'StrataPlayer',
-      artwork: [
-        { src: logoUrl, sizes: '512x512', type: 'image/png' }
-      ]
+      artwork: artwork
     });
   }
 

@@ -149,7 +149,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     useEffect(() => {
         if (!containerRef.current) return;
-        const core = new StrataCore(config);
+        // Pass poster into core config so metadata can use it
+        const core = new StrataCore({ ...config, poster });
 
         // Register plugins
         if (plugins && plugins.length > 0) {

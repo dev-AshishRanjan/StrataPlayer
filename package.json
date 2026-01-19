@@ -35,27 +35,32 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/strataplayer.es.js",
-      "require": "./dist/strataplayer.cjs.js"
+      "require": "./dist/strataplayer.cjs.js",
+      "default": "./dist/strataplayer.es.js"
     },
     "./hls": {
       "types": "./dist/hls.d.ts",
       "import": "./dist/hls.es.js",
-      "require": "./dist/hls.cjs.js"
+      "require": "./dist/hls.cjs.js",
+      "default": "./dist/hls.es.js"
     },
     "./dash": {
       "types": "./dist/dash.d.ts",
       "import": "./dist/dash.es.js",
-      "require": "./dist/dash.cjs.js"
+      "require": "./dist/dash.cjs.js",
+      "default": "./dist/dash.es.js"
     },
     "./mpegts": {
       "types": "./dist/mpegts.d.ts",
       "import": "./dist/mpegts.es.js",
-      "require": "./dist/mpegts.cjs.js"
+      "require": "./dist/mpegts.cjs.js",
+      "default": "./dist/mpegts.es.js"
     },
     "./webtorrent": {
       "types": "./dist/webtorrent.d.ts",
       "import": "./dist/webtorrent.es.js",
-      "require": "./dist/webtorrent.cjs.js"
+      "require": "./dist/webtorrent.cjs.js",
+      "default": "./dist/webtorrent.es.js"
     },
     "./style.css": "./dist/style.css"
   },
