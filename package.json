@@ -1,11 +1,33 @@
 {
   "name": "strataplayer",
   "version": "1.2.2",
-  "description": "A robust, secure, and production-grade video player built for the modern web.",
+  "description": "A modern, framework-agnostic media engine for the web. Supports HLS, DASH, MPEG-TS, and WebTorrent with a plugin-based architecture and React integration.",
   "type": "module",
   "main": "./dist/strataplayer.cjs.js",
   "module": "./dist/strataplayer.es.js",
   "types": "./dist/lib.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dev-AshishRanjan/StrataPlayer.git"
+  },
+  "keywords": [
+    "video-player",
+    "html5-video",
+    "hls",
+    "dash",
+    "mpegts",
+    "webtorrent",
+    "streaming",
+    "react",
+    "media-player",
+    "p2p"
+  ],
+  "author": "Kumar Ashish Ranjan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dev-AshishRanjan/StrataPlayer/issues"
+  },
+  "homepage": "https://dev-ashishranjan.github.io/StrataPlayer/",
   "files": [
     "dist"
   ],
