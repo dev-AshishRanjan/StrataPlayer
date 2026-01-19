@@ -779,6 +779,116 @@ const HlsPluginPage = () => (
         volume={0}
       />
     </LiveExample>
+
+    <h3 className="text-xl font-bold mt-12 mb-4">Advanced: Creating a Custom HLS Plugin</h3>
+    <p className="text-zinc-400 mb-6">
+      If you need granular control over the Hls.js configuration (e.g. buffer size, timeout policies, error recovery),
+      you can create a custom plugin that implements the <code>IPlugin</code> interface. This keeps the core lightweight
+      while allowing full flexibility.
+    </p>
+
+    <CodeBlock
+      language="typescript"
+      title="CustomHlsPlugin.ts"
+      code={`import { StrataCore, IPlugin } from 'strataplayer';
+import Hls from 'hls.js';
+
+export class CustomHlsPlugin implements IPlugin {
+    name = 'CustomHlsPlugin';
+    private hls: Hls | null = null;
+    private core: StrataCore | null = null;
+    private retryCount = 0;
+
+    init(core: StrataCore) {
+        this.core = core;
+        // Listen for video load events
+        core.on('load', (data) => {
+            if (data.type === 'hls' || data.url.includes('.m3u8')) {
+                this.load(data.url);
+            } else {
+                this.destroy();
+            }
+        });
+    }
+
+    load(url: string) {
+        if (this.hls) this.destroy();
+
+        if (!Hls.isSupported()) {
+            // Fallback for Safari (native HLS)
+            if (this.core.video.canPlayType('application/vnd.apple.mpegurl')) {
+                this.core.video.src = url;
+            }
+            return;
+        }
+
+        // Custom High-Performance Configuration
+        const config = {
+            autoStartLoad: true,
+            startFragPrefetch: true,
+            maxBufferLength: 600, // Buffer 10 minutes
+            maxMaxBufferLength: 1800,
+            maxBufferSize: 500 * 1000 * 1000, // 500MB
+            appendErrorMaxRetry: 20,
+            fragLoadPolicy: {
+                default: {
+                    maxTimeToFirstByteMs: 5000,
+                    maxLoadTimeMs: 120000,
+                    timeoutRetry: { maxNumRetry: 10, retryDelayMs: 1000, maxRetryDelayMs: 5000 },
+                    errorRetry: { maxNumRetry: 10, retryDelayMs: 1000, maxRetryDelayMs: 5000 }
+                }
+            }
+        };
+
+        this.hls = new Hls(config);
+        this.hls.loadSource(url);
+        this.hls.attachMedia(this.core.video);
+
+        // Advanced Error Recovery
+        this.hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+                switch (data.type) {
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        console.warn('Fatal media error:', data.details);
+                        if (data.details === 'fragParsingError' && this.retryCount > 2) {
+                            this.core.triggerError('Invalid Chunk Data', true);
+                        } else {
+                            this.retryCount++;
+                            this.hls.recoverMediaError();
+                        }
+                        break;
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                         console.warn('Fatal network error:', data.details);
+                         this.hls.startLoad();
+                         break;
+                    default:
+                        this.hls.destroy();
+                        this.core.triggerError('Fatal HLS Error', true);
+                        break;
+                }
+            } else {
+                this.retryCount = 0;
+            }
+        });
+        
+        // Sync Quality Levels to UI
+        this.hls.on(Hls.Events.MANIFEST_PARSED, (e, data) => {
+             const levels = data.levels.map((l, i) => ({ height: l.height, bitrate: l.bitrate, index: i }));
+             this.core.store.setState({ qualityLevels: levels });
+        });
+    }
+
+    destroy() {
+        if (this.hls) {
+            this.hls.destroy();
+            this.hls = null;
+        }
+    }
+}
+
+// Usage:
+// <StrataPlayer plugins={[new CustomHlsPlugin()]} ... />`}
+    />
   </div>
 );
 

@@ -254,8 +254,3 @@ Contributions are welcome! Please follow these steps:
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
----
-
-<div align="center">
-  Built with ❤️ by <a href="https://github.com/dev-AshishRanjan">Ashish Ranjan</a>
-</div>
