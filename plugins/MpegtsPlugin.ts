@@ -1,4 +1,4 @@
-import { StrataCore, IPlugin } from '../core/StrataCore';
+import { StrataCore, IPlugin } from 'strataplayer';
 import * as MpegtsModule from 'mpegts.js';
 
 const mpegts = (MpegtsModule as any).default || MpegtsModule;

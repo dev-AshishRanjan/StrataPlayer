@@ -17,7 +17,11 @@
     "noFallthroughCasesInSwitch": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "paths": {
+      "strataplayer": ["./lib.ts"],
+      "strataplayer/*": ["./*"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx", "vite-env.d.ts"],
   "exclude": ["node_modules", "dist", "dist-site"]

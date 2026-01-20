@@ -1,5 +1,5 @@
 
-import { StrataCore, IPlugin } from '../core/StrataCore';
+import { StrataCore, IPlugin } from 'strataplayer';
 import * as HlsModule from 'hls.js';
 
 // Handle environment differences where Hls might be a default export or module export

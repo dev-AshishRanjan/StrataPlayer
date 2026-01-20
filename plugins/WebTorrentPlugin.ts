@@ -1,5 +1,5 @@
 
-import { StrataCore, IPlugin } from '../core/StrataCore';
+import { StrataCore, IPlugin } from 'strataplayer';
 import * as WebTorrentModule from 'webtorrent';
 
 // Handle flexible import for WebTorrent

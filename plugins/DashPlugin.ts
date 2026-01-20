@@ -1,4 +1,4 @@
-import { StrataCore, IPlugin } from '../core/StrataCore';
+import { StrataCore, IPlugin } from 'strataplayer';
 import * as DashModule from 'dashjs';
 
 // Handle environment differences where dashjs might be a default export or module export
