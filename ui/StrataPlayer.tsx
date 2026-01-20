@@ -1045,7 +1045,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                     {/* Bottom Control Bar - Hidden if locked */}
                     <div
-                        className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 pb-4 md:pb-6 pt-24 bg-gradient-to-t from-black/95 via-black/70 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+                        className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 py-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
                         onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); setIsVolumeLocked(false); } e.stopPropagation(); }}
                     >
                         {/* Progress Bar (Hidden in Live Mode) */}
