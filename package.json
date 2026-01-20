@@ -64,6 +64,25 @@
     },
     "./style.css": "./dist/style.css"
   },
+  "typesVersions": {
+    "*": {
+      "dash": [
+        "./dist/dash.d.ts"
+      ],
+      "hls": [
+        "./dist/hls.d.ts"
+      ],
+      "mpegts": [
+        "./dist/mpegts.d.ts"
+      ],
+      "webtorrent": [
+        "./dist/webtorrent.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build --mode lib && vite build --mode demo",
