@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
         dts({
           insertTypesEntry: true,
           include: ['lib.ts', 'core', 'plugins', 'ui', 'utils'],
-          rollupTypes: true
+          rollupTypes: false
         })
       ],
       resolve: resolveConfig,
