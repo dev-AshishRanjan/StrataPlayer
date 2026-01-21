@@ -131,6 +131,7 @@ export interface PlayerState {
   currentAudioTrack: number;
   error: string | null;
   isFullscreen: boolean;
+  isWebFullscreen: boolean;
   isPip: boolean;
   subtitleTracks: { label: string; language: string; index: number }[];
   currentSubtitle: number;
@@ -233,6 +234,7 @@ export const DEFAULT_STATE: PlayerState = {
   currentAudioTrack: -1,
   error: null,
   isFullscreen: false,
+  isWebFullscreen: false,
   isPip: false,
   subtitleTracks: [],
   currentSubtitle: -1,
@@ -952,6 +954,25 @@ export class StrataCore {
     }
   }
 
+  toggleWebFullscreen() {
+    const isWebFs = this.store.get().isWebFullscreen;
+
+    // If native fullscreen is active, exit it first to avoid conflicts
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => { });
+    }
+
+    const newState = !isWebFs;
+    this.store.setState({ isWebFullscreen: newState });
+
+    // Lock body scroll when in web fullscreen
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = newState ? 'hidden' : '';
+    }
+
+    this.emit('webfullscreen', newState);
+  }
+
   togglePip() {
     if (document.pictureInPictureElement) {
       document.exitPictureInPicture();
@@ -1230,6 +1251,12 @@ export class StrataCore {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+
+    // Clean up web fullscreen scroll lock if active
+    if (this.store.get().isWebFullscreen && typeof document !== 'undefined') {
+      document.body.style.overflow = '';
+    }
+
     document.removeEventListener('fullscreenchange', this.boundFullscreenChange);
     this.video.pause();
     this.video.src = '';

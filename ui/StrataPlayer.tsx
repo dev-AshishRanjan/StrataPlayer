@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem } from '../core/StrataCore';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
@@ -242,7 +243,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!player || !useHotKey) return;
             if (document.activeElement?.tagName === 'INPUT') return;
-            switch (e.key.toLowerCase()) {
+            const key = e.key.toLowerCase();
+            switch (key) {
                 case ' ': case 'k': e.preventDefault(); player.togglePlay(); break;
                 case 'arrowright': e.preventDefault(); player.skip(5); break;
                 case 'arrowleft': e.preventDefault(); player.skip(-5); break;
@@ -250,6 +252,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                 case 'arrowdown': e.preventDefault(); player.setVolume(player.video.volume - 0.1); break;
                 case 'f': e.preventDefault(); player.toggleFullscreen(); break;
                 case 'm': e.preventDefault(); player.toggleMute(); break;
+                case 'escape':
+                    // Check store directly to avoid stale state in closure
+                    if (player.store.get().isWebFullscreen) {
+                        e.preventDefault();
+                        player.toggleWebFullscreen();
+                    }
+                    break;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -656,7 +665,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             case 'pip': return <button key="pip" onClick={() => player?.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>;
             case 'download': return <button key="dl" onClick={() => player?.download()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
             case 'fullscreen': return <button key="fs" onClick={() => player?.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform hover:scale-110 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
-            case 'fullscreenWeb': return <button key="fsw" className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
+            case 'fullscreenWeb': return <button key="fsw" onClick={() => player?.toggleWebFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
             case 'settings':
                 return (
                     <div key="settings" className="relative">
@@ -830,11 +839,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         return items;
     }, [config.contextmenu, state.aspectRatio, state.isLooping, player]);
 
-    return (
+    const isWebFs = state.isWebFullscreen;
+
+    const playerContent = (
         <div
             id={config.id}
             ref={containerRef}
-            className={`group relative w-full h-full bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none rounded-[var(--radius)] text-zinc-100 strata-player-reset ${config.container || ''}`}
+            className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius)]'} ${config.container || ''}`}
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
             onMouseMove={handleMouseMove}
@@ -1096,4 +1107,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             )}
         </div>
     );
+
+    if (isWebFs && typeof document !== 'undefined') {
+        return createPortal(playerContent, document.body);
+    }
+
+    return playerContent;
 };
