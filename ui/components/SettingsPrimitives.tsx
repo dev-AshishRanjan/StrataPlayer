@@ -35,7 +35,7 @@ export const Toggle = ({ label, checked, onChange, icon, tooltip }: any) => (
       } as React.CSSProperties}
     >
       <div
-        className={`absolute top-1/2 -translate-y-1/2 left-0.5 bg-white w-4 h-4 transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'}`}
+        className={`absolute top-1/2 -translate-y-1/2 left-1 bg-white w-4 h-4 transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'}`}
         style={{ borderRadius: 'var(--radius-full)' }}
       />
     </button>
