@@ -101,18 +101,41 @@ export interface ControlItem {
   builtInId?: string;
 }
 
+export interface SettingOption {
+  label: string;
+  value: any;
+  default?: boolean;
+  icon?: string | React.ReactNode;
+}
+
 export interface SettingItem {
   id?: string;
   html: string | React.ReactNode;
   icon?: string | React.ReactNode;
   tooltip?: string;
+  isDefault?: boolean; // Mark as one of the default settings
+
   // Toggle Switch Support
   switch?: boolean;
   onSwitch?: (item: SettingItem) => boolean | void;
+
   // Standard Action Support
   onClick?: () => void;
   click?: () => void; // Alias
-  isDefault?: boolean; // Mark as one of the default settings
+
+  // Range (Slider) Support
+  range?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  value?: number; // Current value
+  onRange?: (value: number) => void;
+  formatValue?: (value: number) => string;
+
+  // Nested Options (Select) Support
+  options?: SettingOption[];
+  onSelect?: (option: SettingOption, index: number) => void;
+  currentValue?: any; // To display selected state in parent menu
 }
 
 export interface PlayerState {

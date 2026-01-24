@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem } from '../core/StrataCore';
+import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem, SettingOption } from '../core/StrataCore';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
 import { NotificationContainer } from './components/NotificationContainer';
@@ -126,7 +126,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState<'main' | 'quality' | 'speed' | 'audio' | 'boost' | 'party' | 'appearance' | 'sources' | 'flip' | 'ratio'>('main');
+
+    // Changed to string to support dynamic submenu IDs
+    const [activeMenu, setActiveMenu] = useState<string>('main');
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean }>({ x: 0, y: 0, visible: false });
@@ -749,18 +751,53 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                                     {/* Custom User Settings */}
                                     {config.settings && config.settings.length > 0 && <MenuDivider />}
-                                    {config.settings?.map((s, i) => (
-                                        s.switch !== undefined ? (
-                                            <div key={`cust-${i}`} className="px-1">
-                                                <Toggle
+                                    {config.settings?.map((s, i) => {
+                                        // Case 1: Range (Slider)
+                                        if (s.range) {
+                                            return (
+                                                <div key={`cust-${i}`} className="px-1">
+                                                    <Slider
+                                                        label={s.html}
+                                                        icon={s.icon}
+                                                        value={s.value ?? s.min ?? 0}
+                                                        min={s.min ?? 0}
+                                                        max={s.max ?? 100}
+                                                        step={s.step ?? 1}
+                                                        onChange={(val: number) => { if (s.onRange) s.onRange(val); }}
+                                                        formatValue={s.formatValue}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                        // Case 2: Toggle Switch
+                                        if (s.switch !== undefined) {
+                                            return (
+                                                <div key={`cust-${i}`} className="px-1">
+                                                    <Toggle
+                                                        label={s.html}
+                                                        icon={s.icon}
+                                                        checked={s.switch}
+                                                        tooltip={s.tooltip}
+                                                        onChange={(val: boolean) => { if (s.onSwitch) s.onSwitch(s); }}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                        // Case 3: Submenu Options
+                                        if (s.options && s.id) {
+                                            return (
+                                                <MenuItem
+                                                    key={`cust-${i}`}
                                                     label={s.html}
                                                     icon={s.icon}
-                                                    checked={s.switch}
-                                                    tooltip={s.tooltip}
-                                                    onChange={(val: boolean) => { if (s.onSwitch) s.onSwitch(s); }}
+                                                    value={s.currentValue}
+                                                    onClick={() => setActiveMenu(s.id!)}
+                                                    hasSubmenu
                                                 />
-                                            </div>
-                                        ) : (
+                                            );
+                                        }
+                                        // Case 4: Simple Action
+                                        return (
                                             <MenuItem
                                                 key={`cust-${i}`}
                                                 label={s.html}
@@ -771,8 +808,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                                     setSettingsOpen(false);
                                                 }}
                                             />
-                                        )
-                                    ))}
+                                        );
+                                    })}
 
                                     <MenuDivider />
 
@@ -780,7 +817,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
                                 </div>
                             )}
-                            {/* Submenus... (Logic remains same as previous phase, just collapsed here for brevity in rendering block, but included fully in final output) */}
+
+                            {/* Standard Submenus */}
                             {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio'].includes(activeMenu) && (
                                 <div className="animate-in slide-in-from-right-4 fade-in duration-200">
                                     {activeMenu === 'sources' && (
@@ -867,6 +905,34 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     )}
                                 </div>
                             )}
+
+                            {/* Dynamic Custom Submenus */}
+                            {config.settings?.map((s, i) => {
+                                if (s.options && s.id && activeMenu === s.id) {
+                                    return (
+                                        <div key={`submenu-${i}`} className="animate-in slide-in-from-right-4 fade-in duration-200">
+                                            <MenuHeader
+                                                label={typeof s.html === 'string' ? s.html : 'Settings'}
+                                                onBack={() => setActiveMenu('main')}
+                                            />
+                                            {s.options.map((opt, optIndex) => (
+                                                <MenuItem
+                                                    key={optIndex}
+                                                    label={opt.label}
+                                                    value={opt.value}
+                                                    icon={opt.icon}
+                                                    active={opt.default || s.currentValue === opt.value}
+                                                    onClick={() => {
+                                                        if (s.onSelect) s.onSelect(opt, optIndex);
+                                                        setActiveMenu('main'); // Auto-close submenu or keep open? Standard is usually close to parent or close all. Here going back to main.
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })}
                         </div></Menu>)}
                     </div>
                 );
@@ -1129,7 +1195,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         </div>
                     )}
                     {state.isBuffering && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><LoaderIcon className="w-12 h-12 text-[var(--accent)] animate-spin drop-shadow-lg" /></div>}
-                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
+                    {state.error && <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/90 backdrop-blur-md animate-in fade-in"><div className="flex flex-col items-center gap-4 text-red-500 p-8 max-w-md text-center"><span className="text-5xl mb-2">⚠️</span><h3 className="text-xl font-bold text-white">Playback Error</h3><p className="text-zinc-400 text-sm">{state.error}</p><button onClick={() => player.load(player.store.get().sources[player.store.get().currentSourceIndex] || { url: src || '', type: type || 'auto' }, textTracks)} className="px-6 py-2 bg-[var(--accent)] text-white font-medium rounded-full hover:opacity-90 transition-opacity mt-4 shadow-lg">Try Again</button></div></div>}
 
                     {/* Center Controls - Hidden if locked or configured off */}
                     {useCenterControls && !state.isLocked && (((!state.isPlaying && !state.isBuffering && !state.error) || state.controlsVisible) && !state.isBuffering) ? (
