@@ -9,7 +9,8 @@ import { WebTorrentPlugin } from '../plugins/WebTorrentPlugin';
 import {
   CheckIcon, CopyIcon, MenuIcon, SettingsIcon,
   ArrowLeftIcon, PlayIcon, InfoIcon, FastForwardIcon,
-  CustomizeIcon, WebFullscreenIcon, PaletteIcon, LockIcon
+  CustomizeIcon, WebFullscreenIcon, PaletteIcon, LockIcon,
+  LayersIcon, MenuIcon as HamburgerIcon
 } from '../ui/Icons';
 
 // --- Helper Components ---
@@ -420,7 +421,7 @@ const UiPropsPage = () => (
       description="Sets the visual theme of the player interface."
       example={`<StrataPlayer\n  src="..."\n  theme="hacker"\n/>`}
     />
-    <LiveExample code='<StrataPlayer theme="pixel" src="..." />'>
+    <LiveExample code='<StrataPlayer theme="pixel" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4" />'>
       <StrataPlayer theme="pixel" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4" />
     </LiveExample>
 
@@ -572,20 +573,35 @@ const ControlsPage = () => (
       Use the <code>index</code> property to order them relative to built-in controls (Play button is index 10).
     </p>
 
+    <PropDoc
+      name="controls"
+      type="ControlItem[]"
+      description="Array of custom control definitions. Can include click actions or nested menus."
+      example={`interface ControlItem {
+  id?: string;
+  position: 'left' | 'right' | 'center';
+  index: number; // Order: 0-100
+  html?: string | ReactNode;
+  tooltip?: string;
+  onClick?: (core: StrataCore) => void;
+  children?: SettingItem[]; // For nested menus
+  className?: string;
+  style?: CSSProperties;
+}`}
+    />
+
+    <h3 className="text-xl font-bold text-white mt-8 mb-4">Simple Action Button</h3>
     <LiveExample
       code={`<StrataPlayer
   src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
   controls={[
     {
-      id: 'custom-alert',
+      id: 'demo-btn',
       position: 'right',
       index: 1, // Place early in right stack
-      html: '★ Click Me',
-      tooltip: 'Show Alert',
-      style: { color: '#6366f1', fontWeight: 'bold', fontSize: '12px' },
-      onClick: (player) => {
-          player.notify({ type: 'success', message: 'You clicked the star!' });
-      }
+      html: <div className="flex items-center gap-1 text-[var(--accent)] font-bold text-xs"><InfoIcon className="w-3 h-3" /> Info</div>,
+      tooltip: 'Demo Click',
+      onClick: (player) => player.notify({ type: 'info', message: 'This is a custom control button!' })
     }
   ]}
 />`}
@@ -606,21 +622,60 @@ const ControlsPage = () => (
       />
     </LiveExample>
 
-    <PropDoc
-      name="controls"
-      type="ControlItem[]"
-      description="Array of custom control definitions."
-      example={`interface ControlItem {
-  id?: string;
-  position: 'left' | 'right' | 'center';
-  index: number; // Order: 0-100
-  html?: string | ReactNode;
-  tooltip?: string;
-  onClick?: (core: StrataCore) => void;
-  className?: string;
-  style?: CSSProperties;
-}`}
-    />
+    <h3 className="text-xl font-bold text-white mt-8 mb-4">Nested Menu (2-Level Deep)</h3>
+    <p className="text-zinc-400 mb-4">
+      Controls can also open complex menus. Use the <code>children</code> property to define nested structure.
+    </p>
+    <LiveExample
+      code={`<StrataPlayer
+  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+  controls={[
+    {
+      id: 'custom-menu',
+      position: 'right',
+      index: 2,
+      html: <MenuIcon className="w-5 h-5" />,
+      tooltip: 'Custom Menu',
+      children: [
+        { html: 'Quick Action', onClick: () => alert('Quick!') },
+        { separator: true },
+        {
+          html: 'Nested Options',
+          children: [
+             { html: 'Level 2 - Item A', onClick: () => alert('A') },
+             { html: 'Level 2 - Item B', onClick: () => alert('B') }
+          ]
+        }
+      ]
+    }
+  ]}
+/>`}
+    >
+      <StrataPlayer
+        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        controls={[
+          {
+            id: 'custom-menu',
+            position: 'right',
+            index: 2,
+            html: <HamburgerIcon className="w-5 h-5" />, // Using HamburgerIcon visually aliased as MenuIcon in imports
+            tooltip: 'Custom Menu',
+            children: [
+              { html: 'Quick Action', onClick: () => alert('Quick Action Triggered') },
+              { separator: true },
+              {
+                html: 'Nested Options',
+                children: [
+                  { html: 'Level 2 - Item A', onClick: () => alert('Selected Item A') },
+                  { html: 'Level 2 - Item B', onClick: () => alert('Selected Item B') }
+                ]
+              }
+            ]
+          }
+        ]}
+        theme="default"
+      />
+    </LiveExample>
   </div>
 );
 
@@ -628,25 +683,66 @@ const SettingsPage = () => (
   <div className="space-y-8 animate-in fade-in duration-500">
     <h1 className="text-3xl font-bold mb-8">Settings Menu</h1>
     <p className="text-zinc-400 mb-8">
-      Extend the main settings menu with custom items. You can add simple actions or toggle switches.
+      Extend the main settings menu with custom items. You can add simple actions, toggle switches, or sliders.
     </p>
+
+    <PropDoc
+      name="settings"
+      type="SettingItem[]"
+      description="Array of custom setting definitions to append to the main menu."
+      example={`interface SettingItem {
+  id?: string;
+  html?: string | ReactNode;
+  icon?: string | ReactNode;
+  tooltip?: string;
+  separator?: boolean;
+  
+  // State
+  active?: boolean; // Visual checkmark
+  value?: any; // Value identifier
+
+  // Toggle Switch
+  switch?: boolean;
+  onSwitch?: (item: SettingItem, checked: boolean) => void;
+  
+  // Range Slider
+  range?: boolean;
+  min?: number; max?: number; step?: number;
+  onRange?: (value: number) => void;
+  formatValue?: (value: number) => string;
+
+  // Actions
+  onClick?: (item: SettingItem) => void;
+  
+  // Nested Menu
+  children?: SettingItem[];
+}`}
+    />
 
     <LiveExample
       code={`<StrataPlayer
-  src="..."
+  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
   settings={[
     {
       html: 'Auto-Skip Intro',
       tooltip: 'Skip opening credits',
       switch: true,
-      onSwitch: (item) => {
-         console.log('Toggled!', item);
-         return !item.switch; // Return new state to update visual
+      onSwitch: (item, checked) => {
+         console.log('Toggled!', checked);
+         // You should manage state externally to update the switch prop if needed
       }
+    },
+    { separator: true },
+    {
+      html: 'Advanced Config',
+      icon: <LayersIcon className="w-4 h-4" />,
+      children: [
+        { html: 'Mode A', onClick: () => console.log('A') },
+        { html: 'Mode B', onClick: () => console.log('B') }
+      ]
     },
     {
       html: 'External Link',
-      icon: '<svg>...</svg>',
       onClick: () => window.open('https://google.com', '_blank')
     }
   ]}
@@ -656,12 +752,21 @@ const SettingsPage = () => (
         src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
         settings={[
           {
-            html: 'Demo Toggle',
+            html: 'Auto-Skip Intro',
+            tooltip: 'Skip opening credits',
             switch: true,
-            onSwitch: (item) => {
-              alert('Toggle clicked!');
-              return !item.switch;
+            onSwitch: (item, checked) => {
+              alert(`Toggled: ${checked}`);
             }
+          },
+          { separator: true },
+          {
+            html: 'Advanced Config',
+            icon: <LayersIcon className="w-4 h-4" />,
+            children: [
+              { html: 'Mode A', onClick: () => alert('Mode A Selected') },
+              { html: 'Mode B', onClick: () => alert('Mode B Selected') }
+            ]
           },
           {
             html: 'Visit GitHub',
@@ -681,10 +786,29 @@ const ContextMenuPage = () => (
       Customize the right-click menu. You can add labels, separators, and clickable actions.
     </p>
 
+    <PropDoc
+      name="contextmenu"
+      type="ContextMenuItem[]"
+      description="Array of items to display in the right-click context menu."
+      example={`interface ContextMenuItem {
+  html?: string | ReactNode;
+  disabled?: boolean;
+  icon?: string | ReactNode;
+  onClick?: (close: () => void) => void;
+  checked?: boolean;
+  separator?: boolean;
+  isLabel?: boolean; // Renders as a non-clickable header
+}`}
+    />
+
     <LiveExample
       code={`<StrataPlayer
-  src="..."
+  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
   contextmenu={[
+    {
+      html: 'Custom Actions',
+      isLabel: true
+    },
     {
       html: 'Copy Video URL',
       onClick: (close) => {
@@ -704,9 +828,13 @@ const ContextMenuPage = () => (
         src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
         contextmenu={[
           {
-            html: 'Custom Action',
+            html: 'Custom Actions',
+            isLabel: true
+          },
+          {
+            html: 'Copy Video URL',
             onClick: (close) => {
-              alert('Right click action!');
+              alert('Copied!');
               close();
             }
           },
@@ -729,12 +857,26 @@ const LayersPage = () => (
       Add custom overlay layers on top of the video player. Useful for watermarks, ads, or custom info panels.
     </p>
 
+    <PropDoc
+      name="layers"
+      type="LayerConfig[]"
+      description="Array of custom HTML overlays."
+      example={`interface LayerConfig {
+  name?: string;
+  html: string | ReactNode;
+  style?: CSSProperties;
+  className?: string;
+  click?: () => void;
+  mounted?: (element: HTMLElement) => void;
+}`}
+    />
+
     <LiveExample
       code={`<StrataPlayer
-  src="..."
+  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
   layers={[
     {
-      html: '<div style="background:red; color:white; padding:4px 8px; border-radius:4px;">LIVE</div>',
+      html: <div className="flex items-center gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="text-xs font-bold text-white">REC</span></div>,
       style: {
          position: 'absolute',
          top: '20px',
