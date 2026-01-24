@@ -17,7 +17,8 @@ import {
     SubtitleIcon, DownloadIcon, Replay10Icon, Forward10Icon,
     LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
     CustomizeIcon, CameraIcon, LockIcon, UnlockIcon, WebFullscreenIcon,
-    FastForwardIcon, RatioIcon, ExpandIcon, InfoIcon
+    FastForwardIcon, RatioIcon, ExpandIcon, InfoIcon,
+    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon
 } from './Icons';
 
 declare module 'react' {
@@ -717,17 +718,37 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             {activeMenu === 'main' && (
                                 <div className="animate-in slide-in-from-left-4 fade-in duration-200">
                                     <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
-                                    {state.sources.length > 1 && <MenuItem label="Source" value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />}
-                                    <MenuItem label="Speed" value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
-                                    <MenuItem label="Quality" value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
-                                    <MenuItem label="Audio" value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
-                                    {useFlip && <MenuItem label="Flip" value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
-                                    {useAspectRatio && <MenuItem label="Aspect Ratio" value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
+
+                                    {/* Source - Top Priority */}
+                                    {state.sources.length > 1 && (
+                                        <>
+                                            <MenuItem label="Source" icon={<ServerIcon className="w-4 h-4" />} value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />
+                                            <MenuDivider />
+                                        </>
+                                    )}
+
+                                    {/* Playback Configuration */}
+                                    <MenuItem label="Quality" icon={<LayersIcon className="w-4 h-4" />} value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
+                                    <MenuItem label="Speed" icon={<GaugeIcon className="w-4 h-4" />} value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
+                                    <MenuItem label="Audio" icon={<MusicIcon className="w-4 h-4" />} value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
+
                                     <MenuDivider />
-                                    <MenuItem label="Audio Boost" value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
+
+                                    {/* Visual Adjustments */}
+                                    {useFlip && <MenuItem label="Flip" icon={<FlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
+                                    {useAspectRatio && <MenuItem label="Aspect Ratio" icon={<CropIcon className="w-4 h-4" />} value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
+
+                                    {/* Audio Tools */}
+                                    <MenuItem label="Audio Boost" icon={<SpeakerIcon className="w-4 h-4" />} value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
+
+                                    <MenuDivider />
+
+                                    {/* Network & Social */}
                                     <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
                                     <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player?.requestCast(); setSettingsOpen(false); }} />
-                                    {/* Custom user settings appended */}
+
+                                    {/* Custom User Settings */}
+                                    {config.settings && config.settings.length > 0 && <MenuDivider />}
                                     {config.settings?.map((s, i) => (
                                         s.switch !== undefined ? (
                                             <div key={`cust-${i}`} className="px-1">
@@ -752,14 +773,39 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                             />
                                         )
                                     ))}
+
                                     <MenuDivider />
+
+                                    {/* Appearance - Bottom */}
                                     <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
                                 </div>
                             )}
                             {/* Submenus... (Logic remains same as previous phase, just collapsed here for brevity in rendering block, but included fully in final output) */}
                             {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio'].includes(activeMenu) && (
                                 <div className="animate-in slide-in-from-right-4 fade-in duration-200">
-                                    {activeMenu === 'sources' && (<><MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />{state.sources.map((src, i) => (<MenuItem key={i} label={src.name || `Source ${i + 1}`} value={src.type} active={state.currentSourceIndex === i} onClick={() => player?.switchSource(i)} />))}</>)}
+                                    {activeMenu === 'sources' && (
+                                        <>
+                                            <MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />
+                                            {state.sources.map((src, i) => {
+                                                const status = state.sourceStatuses[i];
+                                                const statusIcon = status === 'success'
+                                                    ? <WifiIcon className="w-3.5 h-3.5 text-emerald-500" />
+                                                    : status === 'error'
+                                                        ? <AlertCircleIcon className="w-3.5 h-3.5 text-red-500" />
+                                                        : null;
+                                                return (
+                                                    <MenuItem
+                                                        key={i}
+                                                        label={src.name || `Source ${i + 1}`}
+                                                        value={src.type}
+                                                        active={state.currentSourceIndex === i}
+                                                        rightIcon={statusIcon}
+                                                        onClick={() => player?.switchSource(i)}
+                                                    />
+                                                );
+                                            })}
+                                        </>
+                                    )}
                                     {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player!.video.playbackRate = rate} />))}</>)}
                                     {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player?.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player?.setQuality(lvl.index)} />))}</>)}
                                     {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player?.setAudioTrack(track.index)} />))}</>)}

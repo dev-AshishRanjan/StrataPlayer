@@ -148,6 +148,7 @@ export interface PlayerState {
   // Sources
   sources: PlayerSource[];
   currentSourceIndex: number;
+  sourceStatuses: Record<number, 'success' | 'error' | undefined>;
 
   // Phase 1 New Features State
   isLocked: boolean;
@@ -249,6 +250,7 @@ export const DEFAULT_STATE: PlayerState = {
   theme: 'default',
   sources: [],
   currentSourceIndex: -1,
+  sourceStatuses: {},
   // New State Defaults
   isLocked: false,
   flipState: { horizontal: false, vertical: false },
@@ -289,7 +291,8 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     // Config overrides state for these visual modes
     isAutoSized: config.autoSize ?? DEFAULT_STATE.isAutoSized,
     isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive,
-    isLooping: config.loop ?? saved.isLooping ?? DEFAULT_STATE.isLooping
+    isLooping: config.loop ?? saved.isLooping ?? DEFAULT_STATE.isLooping,
+    sourceStatuses: {} // Never persist statuses
   };
 };
 
@@ -495,6 +498,8 @@ export class StrataCore {
           case 'canplay':
             s({ isBuffering: false });
             this.emit('loading', false);
+            // Mark source as success
+            this.updateSourceStatus('success');
             break;
 
           case 'loadeddata':
@@ -502,6 +507,8 @@ export class StrataCore {
             this.retryCount = 0;
             this.removeNotification('retry');
             if (this.store.get().error) s({ error: null });
+            // Mark source as success
+            this.updateSourceStatus('success');
             break;
           case 'loadedmetadata':
             this.updateMediaSessionMetadata();
@@ -547,6 +554,15 @@ export class StrataCore {
 
     this.video.textTracks.addEventListener('addtrack', this.updateSubtitles.bind(this));
     this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
+  }
+
+  private updateSourceStatus(status: 'success' | 'error') {
+    const idx = this.store.get().currentSourceIndex;
+    if (idx !== -1) {
+      this.store.setState((prev) => ({
+        sourceStatuses: { ...prev.sourceStatuses, [idx]: status }
+      }));
+    }
   }
 
   // --- Media Session API ---
@@ -671,6 +687,8 @@ export class StrataCore {
       const finalMsg = `Failed to play after ${this.maxRetries} attempts: ${message}`;
       this.store.setState({ error: finalMsg });
       this.emit('error', finalMsg);
+      // Mark source as error
+      this.updateSourceStatus('error');
     }
   }
 

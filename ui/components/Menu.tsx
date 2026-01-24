@@ -1,22 +1,48 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { ArrowLeftIcon, CheckIcon } from '../Icons';
 
 export const Menu = ({ children, onClose, align = 'right', maxHeight, className }: { children?: React.ReactNode; onClose: () => void; align?: 'right' | 'center'; maxHeight?: number; className?: string }) => {
-  const ref = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | 'auto'>('auto');
 
   const positionClasses = align === 'center' ? 'left-1/2 -translate-x-1/2 origin-bottom' : 'right-0 origin-bottom-right';
 
-  const styleObj = maxHeight ? { maxHeight: `${maxHeight}px` } : {};
+  // Smooth height animation logic
+  useLayoutEffect(() => {
+    if (!contentRef.current) return;
+
+    const updateHeight = () => {
+      if (contentRef.current) {
+        setHeight(contentRef.current.offsetHeight);
+      }
+    };
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(contentRef.current);
+
+    // Initial measure
+    updateHeight();
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Constrain dynamic height by maxHeight prop if provided
+  const calculatedStyle = {
+    height: height === 'auto' ? 'auto' : `${height + 14}px`, // + padding
+    maxHeight: maxHeight ? `${maxHeight}px` : undefined,
+  };
 
   return (
     <div
-      className={`absolute bottom-full mb-4 ${positionClasses} bg-[var(--bg-panel)] backdrop-blur-xl border-[length:var(--border-width)] border-white/10 shadow-2xl overflow-hidden w-[300px] max-w-[calc(100vw-32px)] text-sm z-50 ring-1 ring-white/5 font-[family-name:var(--font-main)] flex flex-col p-1.5 transition-all duration-300 ease-out ${className}`}
-      style={{ ...styleObj, borderRadius: 'var(--radius-lg)' }}
+      ref={containerRef}
+      className={`absolute bottom-full mb-4 ${positionClasses} bg-[var(--bg-panel)] backdrop-blur-xl border-[length:var(--border-width)] border-white/10 shadow-2xl overflow-hidden w-[300px] max-w-[calc(100vw-32px)] text-sm z-50 ring-1 ring-white/5 font-[family-name:var(--font-main)] flex flex-col p-1.5 transition-[height,opacity,transform] duration-300 ease-out ${className}`}
+      style={{ ...calculatedStyle, borderRadius: 'var(--radius-lg)' }}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="overflow-y-auto hide-scrollbar flex-1" style={{ borderRadius: 'var(--radius)' }}>
-        <div ref={ref}>{children}</div>
+        <div ref={contentRef}>{children}</div>
       </div>
     </div>
   );
@@ -32,7 +58,7 @@ const RenderContent = ({ content, className }: { content: string | React.ReactNo
   return <span className={className}>{content}</span>;
 };
 
-export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: any) => (
+export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon, rightIcon }: any) => (
   <button
     onClick={onClick}
     className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors text-left text-zinc-200 active:bg-white/5 focus:outline-none focus:bg-white/10 group overflow-hidden my-0.5"
@@ -46,6 +72,7 @@ export const MenuItem = ({ label, value, active, onClick, hasSubmenu, icon }: an
     </div>
     <div className="flex items-center gap-2 text-zinc-400 shrink-0">
       {value && <span className="text-xs font-medium truncate max-w-[60px]" title={value}>{value}</span>}
+      {rightIcon}
       {active && <CheckIcon className="w-4 h-4 text-[var(--accent)] shrink-0" />}
       {hasSubmenu && <span className="text-xs group-hover:translate-x-0.5 transition-transform text-zinc-500 shrink-0">›</span>}
     </div>
