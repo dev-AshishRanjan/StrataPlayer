@@ -28,6 +28,20 @@ declare module 'react' {
     }
 }
 
+// Helper to determine best contrast color (black or white) for a given hex background
+function getContrastColor(hex: string) {
+    if (!hex) return '#ffffff';
+    hex = hex.replace('#', '');
+    if (hex.length === 3) {
+        hex = hex.split('').map(char => char + char).join('');
+    }
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return (yiq >= 128) ? '#000000' : '#ffffff';
+}
+
 // --- Main Player Component ---
 
 interface StrataPlayerProps extends StrataConfig {
@@ -106,6 +120,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         () => player ? player.store.get() : initialState,
         () => initialState
     );
+
+    const accentContrast = useMemo(() => getContrastColor(state.themeColor), [state.themeColor]);
 
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
@@ -294,12 +310,20 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     // --- Fast Forward Logic ---
     const startFastForward = useCallback(() => {
         if (!useFastForward || !player || !state.isPlaying || state.isLocked) return;
+
+        // Prevent gestures if menus are open
+        if (settingsOpen || subtitleMenuOpen) {
+            setSettingsOpen(false);
+            setSubtitleMenuOpen(false);
+            return;
+        }
+
         originalRateRef.current = player.video.playbackRate;
         fastForwardTimerRef.current = setTimeout(() => {
             player.video.playbackRate = 2;
             setIsFastForwarding(true);
         }, 500); // 500ms delay for long press
-    }, [useFastForward, player, state.isPlaying, state.isLocked]);
+    }, [useFastForward, player, state.isPlaying, state.isLocked, settingsOpen, subtitleMenuOpen]);
 
     const stopFastForward = useCallback(() => {
         if (fastForwardTimerRef.current) clearTimeout(fastForwardTimerRef.current);
@@ -312,6 +336,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     // --- Gesture Seek Logic ---
     const handleTouchStart = (e: React.TouchEvent) => {
         startFastForward();
+
+        // Prevent gestures if menus are open
+        if (settingsOpen || subtitleMenuOpen) {
+            setSettingsOpen(false);
+            setSubtitleMenuOpen(false);
+            return;
+        }
 
         if (useGestureSeek && !state.isLocked) {
             touchStartX.current = e.touches[0].clientX;
@@ -371,6 +402,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
         if (state.isLocked) return;
+
+        // Ensure menus close when interacting with progress bar
+        if (settingsOpen || subtitleMenuOpen) {
+            setSettingsOpen(false);
+            setSubtitleMenuOpen(false);
+        }
+
         setIsScrubbing(true);
         setScrubbingTime(calculateTimeFromEvent(e));
         const handleMove = (moveEvent: MouseEvent | TouchEvent) => setScrubbingTime(calculateTimeFromEvent(moveEvent));
@@ -431,9 +469,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             return;
         }
 
-        // Close menus on outside click
-        if (settingsOpen) setSettingsOpen(false);
-        if (subtitleMenuOpen) setSubtitleMenuOpen(false);
+        // Close menus on outside click. If menus were open, stop here (don't toggle play/seek).
+        if (settingsOpen || subtitleMenuOpen) {
+            setSettingsOpen(false);
+            setSubtitleMenuOpen(false);
+            return;
+        }
+
         if (isVolumeLocked) setIsVolumeLocked(false);
         if (contextMenu.visible) setContextMenu({ ...contextMenu, visible: false });
 
@@ -848,7 +890,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             ref={containerRef}
             className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius)]'} ${config.container || ''}`}
             // touch-action: manipulation improves tap response
-            style={{ touchAction: 'manipulation', '--accent': state.themeColor } as React.CSSProperties}
+            style={{ touchAction: 'manipulation', '--accent': state.themeColor, '--accent-contrast': accentContrast } as React.CSSProperties}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen && player) player.setControlsVisible(false); }}
 
@@ -1059,7 +1101,19 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {/* Bottom Control Bar - Hidden if locked */}
                     <div
                         className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 py-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
-                        onClick={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setSubtitleMenuOpen(false); setIsVolumeLocked(false); } e.stopPropagation(); }}
+                        onClick={(e) => {
+                            if (settingsOpen || subtitleMenuOpen) {
+                                setSettingsOpen(false);
+                                setSubtitleMenuOpen(false);
+                            }
+                            // Only stop prop if we are not closing menus, or do we want clicks on bar to NEVER toggle play?
+                            // Standard behavior: Clicking empty space on control bar does nothing (stops prop).
+                            // But we added menu closing logic above.
+                            if (e.target === e.currentTarget) {
+                                setIsVolumeLocked(false);
+                            }
+                            e.stopPropagation();
+                        }}
                     >
                         {/* Progress Bar (Hidden in Live Mode) */}
                         {!config.isLive && (
