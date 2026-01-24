@@ -83,3 +83,37 @@ export const parseVTT = async (url: string, notify: (msg: any) => void, timeout:
     return [];
   }
 };
+
+export const injectLibraryResources = () => {
+  if (typeof document === 'undefined') return;
+
+  // 1. Google Fonts
+  if (!document.getElementById('strata-fonts')) {
+    // Preconnects for performance
+    const pre1 = document.createElement('link');
+    pre1.rel = 'preconnect';
+    pre1.href = 'https://fonts.googleapis.com';
+    document.head.appendChild(pre1);
+
+    const pre2 = document.createElement('link');
+    pre2.rel = 'preconnect';
+    pre2.href = 'https://fonts.gstatic.com';
+    pre2.crossOrigin = 'anonymous';
+    document.head.appendChild(pre2);
+
+    // Main Font Sheet
+    const link = document.createElement('link');
+    link.id = 'strata-fonts';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Press+Start+2P&family=Cinzel:wght@400;600;700&display=swap';
+    document.head.appendChild(link);
+  }
+
+  // 2. Google Cast SDK
+  // Ensure we don't inject if already present
+  if (!document.querySelector('script[src*="cast_sender.js"]') && !(window as any).cast) {
+    const script = document.createElement('script');
+    script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+    document.head.appendChild(script);
+  }
+};

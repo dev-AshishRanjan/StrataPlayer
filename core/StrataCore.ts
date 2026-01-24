@@ -2,6 +2,7 @@
 import { EventBus, EventCallback } from './EventBus';
 import { NanoStore } from './NanoStore';
 import { AudioEngine } from './AudioEngine';
+import { injectLibraryResources } from '../utils/playerUtils';
 import React from 'react';
 
 export interface Notification {
@@ -323,6 +324,7 @@ export class StrataCore {
   private boundFullscreenChange: () => void;
 
   constructor(config: StrataConfig = {}, videoElement?: HTMLVideoElement) {
+    injectLibraryResources(); // Ensure fonts and external SDKs are loaded
     this.config = config;
     // Set Defaults
     this.config.autoOrientation = this.config.autoOrientation ?? true;
