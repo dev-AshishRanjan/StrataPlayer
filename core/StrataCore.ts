@@ -60,14 +60,11 @@ export interface Highlight {
   text: string;
 }
 
-// --- Phase 2: New Interfaces ---
-
 export interface LayerConfig {
   name?: string;
   html: string | React.ReactNode;
   style?: React.CSSProperties;
   className?: string;
-  // Compatibility aliases
   click?: () => void;
   mounted?: (element: HTMLElement) => void;
 }
@@ -77,65 +74,59 @@ export interface ContextMenuItem {
   disabled?: boolean;
   icon?: string | React.ReactNode;
   onClick?: (close: () => void) => void;
-  click?: (close: () => void) => void; // Alias
-  checked?: boolean; // Checkbox style
+  click?: (close: () => void) => void;
+  checked?: boolean;
+  separator?: boolean;
+  isLabel?: boolean;
+  showBorder?: boolean;
+}
 
-  // Formatting
-  showBorder?: boolean; // Deprecated in favor of separator item, but kept for compat
-  separator?: boolean; // Render as a divider line
-  isLabel?: boolean; // Render as a category header/label
+export interface SettingItem {
+  id?: string;
+  html?: string | React.ReactNode; // Optional to support separators
+  icon?: string | React.ReactNode;
+  tooltip?: string;
+  separator?: boolean; // New: Divider support
+
+  // State
+  active?: boolean; // Visual "check" state
+  value?: any; // Value identifier for selection logic
+
+  // Toggle Switch
+  switch?: boolean;
+  onSwitch?: (item: SettingItem, checked: boolean) => void;
+
+  // Range Slider
+  range?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  onRange?: (value: number) => void;
+  formatValue?: (value: number) => string;
+
+  // Action
+  onClick?: (item: SettingItem) => void;
+  click?: (item: SettingItem) => void; // Alias
+
+  // Recursion (Nested Menu)
+  children?: SettingItem[];
+  currentLabel?: React.ReactNode; // Label to show in parent (e.g. "1080p") next to arrow
 }
 
 export interface ControlItem {
   id?: string;
   position: 'left' | 'right' | 'center';
-  index: number; // Order: 0-100
-  html?: string | React.ReactNode; // Custom content
+  index: number;
+  html?: string | React.ReactNode;
   tooltip?: string;
   onClick?: (core: StrataCore) => void;
-  click?: (core: StrataCore) => void; // Alias
+  click?: (core: StrataCore) => void;
   className?: string;
   style?: React.CSSProperties;
-  // Internal use for built-ins
   isBuiltIn?: boolean;
-  builtInId?: string;
-}
 
-export interface SettingOption {
-  label: string;
-  value: any;
-  default?: boolean;
-  icon?: string | React.ReactNode;
-}
-
-export interface SettingItem {
-  id?: string;
-  html: string | React.ReactNode;
-  icon?: string | React.ReactNode;
-  tooltip?: string;
-  isDefault?: boolean; // Mark as one of the default settings
-
-  // Toggle Switch Support
-  switch?: boolean;
-  onSwitch?: (item: SettingItem) => boolean | void;
-
-  // Standard Action Support
-  onClick?: () => void;
-  click?: () => void; // Alias
-
-  // Range (Slider) Support
-  range?: boolean;
-  min?: number;
-  max?: number;
-  step?: number;
-  value?: number; // Current value
-  onRange?: (value: number) => void;
-  formatValue?: (value: number) => string;
-
-  // Nested Options (Select) Support
-  options?: SettingOption[];
-  onSelect?: (option: SettingOption, index: number) => void;
-  currentValue?: any; // To display selected state in parent menu
+  // Nested Menu Support for Controls
+  children?: SettingItem[];
 }
 
 export interface PlayerState {

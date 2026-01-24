@@ -1,16 +1,15 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem, SettingOption } from '../core/StrataCore';
+import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem } from '../core/StrataCore';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
 import { NotificationContainer } from './components/NotificationContainer';
 import { SubtitleOverlay } from './components/SubtitleOverlay';
-import { Menu, MenuItem, MenuHeader, MenuDivider } from './components/Menu';
 import { SubtitleMenu } from './components/SubtitleMenu';
 import { ContextMenu } from './components/ContextMenu';
 import { VideoInfo } from './components/VideoInfo';
-import { SettingsGroup, Toggle, Slider, Select } from './components/SettingsPrimitives';
+import { MenuExplorer } from './components/Menu';
 import {
     PlayIcon, PauseIcon, VolumeHighIcon, VolumeLowIcon, VolumeMuteIcon,
     MaximizeIcon, MinimizeIcon, SettingsIcon, PipIcon,
@@ -103,9 +102,6 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const useCenterControls = config.centerControls ?? true;
     const fetchTimeout = config.fetchTimeout ?? 30000;
 
-    // Default AutoOrientation to true
-    const useAutoOrientation = config.autoOrientation ?? true;
-
     const containerRef = useRef<HTMLDivElement>(null);
     const [player, setPlayer] = useState<StrataCore | null>(null);
     const [hasPlayed, setHasPlayed] = useState(false);
@@ -124,19 +120,17 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const accentContrast = useMemo(() => getContrastColor(state.themeColor), [state.themeColor]);
 
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
-
-    // Changed to string to support dynamic submenu IDs
-    const [activeMenu, setActiveMenu] = useState<string>('main');
+    // Active Overlay State (replaces independent booleans for menus)
+    // ID of the currently open menu/overlay (e.g. 'settings', 'subtitle', or custom control ID)
+    const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean }>({ x: 0, y: 0, visible: false });
     const [showVideoInfo, setShowVideoInfo] = useState(false);
 
     // Transition States
-    const settingsTransition = useTransition(settingsOpen, 200);
-    const subtitleTransition = useTransition(subtitleMenuOpen, 200);
+    // For generic menus, we trigger transition if activeOverlay is set
+    const menuTransition = useTransition(!!activeOverlay, 200);
 
     // Seek & Scrubbing State
     const [isScrubbing, setIsScrubbing] = useState(false);
@@ -232,9 +226,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     useEffect(() => {
         if (player && autoPlay) {
-            // Note: Autoplay might be blocked by browsers if not muted, but user requested unmuted default.
             player.play().catch(() => {
-                // If autoplay fails (likely due to audio), we could fallback to mute, but keeping strictly as requested.
                 console.warn('Autoplay failed (likely needs user interaction)');
             });
         }
@@ -294,30 +286,29 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         // Even if locked, we want to wake up controls so the lock button becomes visible
         player.setControlsVisible(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-        if (settingsOpen || subtitleMenuOpen) return;
+        if (activeOverlay) return;
         controlsTimeoutRef.current = setTimeout(() => {
-            if (!state.isPlaying || settingsOpen || subtitleMenuOpen) return;
+            if (!state.isPlaying || activeOverlay) return;
             player.setControlsVisible(false);
         }, 2500);
     };
 
     useEffect(() => {
         if (!player) return;
-        if (!settingsOpen && !subtitleMenuOpen && state.isPlaying) handleMouseMove();
-        else if (settingsOpen || subtitleMenuOpen) {
+        if (!activeOverlay && state.isPlaying) handleMouseMove();
+        else if (activeOverlay) {
             player.setControlsVisible(true);
             if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         }
-    }, [settingsOpen, subtitleMenuOpen, state.isPlaying, player]);
+    }, [activeOverlay, state.isPlaying, player]);
 
     // --- Fast Forward Logic ---
     const startFastForward = useCallback(() => {
         if (!useFastForward || !player || !state.isPlaying || state.isLocked) return;
 
         // Prevent gestures if menus are open
-        if (settingsOpen || subtitleMenuOpen) {
-            setSettingsOpen(false);
-            setSubtitleMenuOpen(false);
+        if (activeOverlay) {
+            setActiveOverlay(null);
             return;
         }
 
@@ -326,7 +317,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             player.video.playbackRate = 2;
             setIsFastForwarding(true);
         }, 500); // 500ms delay for long press
-    }, [useFastForward, player, state.isPlaying, state.isLocked, settingsOpen, subtitleMenuOpen]);
+    }, [useFastForward, player, state.isPlaying, state.isLocked, activeOverlay]);
 
     const stopFastForward = useCallback(() => {
         if (fastForwardTimerRef.current) clearTimeout(fastForwardTimerRef.current);
@@ -341,9 +332,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         startFastForward();
 
         // Prevent gestures if menus are open
-        if (settingsOpen || subtitleMenuOpen) {
-            setSettingsOpen(false);
-            setSubtitleMenuOpen(false);
+        if (activeOverlay) {
+            setActiveOverlay(null);
             return;
         }
 
@@ -407,9 +397,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (state.isLocked) return;
 
         // Ensure menus close when interacting with progress bar
-        if (settingsOpen || subtitleMenuOpen) {
-            setSettingsOpen(false);
-            setSubtitleMenuOpen(false);
+        if (activeOverlay) {
+            setActiveOverlay(null);
         }
 
         setIsScrubbing(true);
@@ -473,9 +462,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
 
         // Close menus on outside click. If menus were open, stop here (don't toggle play/seek).
-        if (settingsOpen || subtitleMenuOpen) {
-            setSettingsOpen(false);
-            setSubtitleMenuOpen(false);
+        if (activeOverlay) {
+            setActiveOverlay(null);
             return;
         }
 
@@ -486,7 +474,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         player.setControlsVisible(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         controlsTimeoutRef.current = setTimeout(() => {
-            if (!state.isPlaying || settingsOpen || subtitleMenuOpen) return;
+            if (!state.isPlaying || activeOverlay) return;
             player.setControlsVisible(false);
         }, 2500);
 
@@ -592,11 +580,203 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open. 
     // HIDDEN IF LOCKED.
-    // Use state.controlsVisible from Core to sync with external listeners (like ArtPlayer consumers)
-    const isControlsVisible = !state.isLocked && (state.controlsVisible || !state.isPlaying || settingsOpen || subtitleMenuOpen);
+    const isControlsVisible = !state.isLocked && (state.controlsVisible || !state.isPlaying || activeOverlay);
     const isVolumeVisible = isVolumeHovered || isVolumeScrubbing || isVolumeLocked;
 
     const backdropClass = isBackdrop ? 'backdrop-blur-xl bg-black/80' : 'bg-black/95';
+
+    // --- Dynamic Settings Tree Construction ---
+    const settingsTree: SettingItem[] = useMemo(() => {
+        const items: SettingItem[] = [];
+
+        // 1. Source Selection
+        if (state.sources.length > 1) {
+            items.push({
+                id: 'sources',
+                html: 'Source',
+                icon: <ServerIcon className="w-4 h-4" />,
+                currentLabel: state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`,
+                children: state.sources.map((src, i) => ({
+                    html: src.name || `Source ${i + 1}`,
+                    active: state.currentSourceIndex === i,
+                    icon: state.sourceStatuses[i] === 'success'
+                        ? <WifiIcon className="w-3.5 h-3.5 text-emerald-500" />
+                        : state.sourceStatuses[i] === 'error'
+                            ? <AlertCircleIcon className="w-3.5 h-3.5 text-red-500" />
+                            : undefined,
+                    onClick: () => player?.switchSource(i)
+                }))
+            });
+            items.push({ separator: true });
+        }
+
+        // 2. Playback Config
+        items.push({
+            id: 'quality',
+            html: 'Quality',
+            icon: <LayersIcon className="w-4 h-4" />,
+            currentLabel: state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`,
+            children: [
+                {
+                    html: 'Auto',
+                    active: state.currentQuality === -1,
+                    onClick: () => player?.setQuality(-1)
+                },
+                ...state.qualityLevels.map((lvl) => ({
+                    html: `${lvl.height}p`,
+                    value: `${Math.round(lvl.bitrate / 1000)}k`,
+                    active: state.currentQuality === lvl.index,
+                    onClick: () => player?.setQuality(lvl.index)
+                }))
+            ]
+        });
+
+        items.push({
+            id: 'speed',
+            html: 'Speed',
+            icon: <GaugeIcon className="w-4 h-4" />,
+            currentLabel: `${state.playbackRate}x`,
+            children: [0.5, 1, 1.5, 2].map(rate => ({
+                html: `${rate}x`,
+                active: state.playbackRate === rate,
+                onClick: () => player!.video.playbackRate = rate
+            }))
+        });
+
+        items.push({
+            id: 'audio',
+            html: 'Audio',
+            icon: <MusicIcon className="w-4 h-4" />,
+            currentLabel: state.audioTracks[state.currentAudioTrack]?.label || 'Default',
+            children: state.audioTracks.length === 0
+                ? [{ html: 'No tracks available', onClick: () => { } }]
+                : state.audioTracks.map((track) => ({
+                    html: track.label,
+                    value: track.language,
+                    active: state.currentAudioTrack === track.index,
+                    onClick: () => player?.setAudioTrack(track.index)
+                }))
+        });
+
+        items.push({ separator: true });
+
+        // 3. Visuals
+        if (useFlip) {
+            items.push({
+                id: 'flip',
+                html: 'Flip',
+                icon: <FlipIcon className="w-4 h-4" />,
+                currentLabel: state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal',
+                children: [
+                    {
+                        html: 'Horizontal Flip',
+                        switch: state.flipState.horizontal,
+                        onSwitch: () => player?.setFlip('horizontal')
+                    },
+                    {
+                        html: 'Vertical Flip',
+                        switch: state.flipState.vertical,
+                        onSwitch: () => player?.setFlip('vertical')
+                    }
+                ]
+            });
+        }
+
+        if (useAspectRatio) {
+            items.push({
+                id: 'ratio',
+                html: 'Aspect Ratio',
+                icon: <CropIcon className="w-4 h-4" />,
+                currentLabel: state.aspectRatio,
+                children: ['default', '16:9', '4:3'].map(r => ({
+                    html: r === 'default' ? 'Default' : r,
+                    active: state.aspectRatio === r,
+                    onClick: () => player?.setAspectRatio(r)
+                }))
+            });
+        }
+
+        // 4. Audio Boost
+        items.push({
+            id: 'boost',
+            html: 'Audio Boost',
+            icon: <SpeakerIcon className="w-4 h-4" />,
+            currentLabel: state.audioGain > 1 ? `${state.audioGain}x` : 'Off',
+            children: [1, 1.5, 2, 3].map(gain => ({
+                html: gain === 1 ? 'Off' : `${gain}x`,
+                active: state.audioGain === gain,
+                onClick: () => player?.setAudioGain(gain)
+            }))
+        });
+
+        items.push({ separator: true });
+
+        // 5. Watch Party
+        items.push({
+            id: 'party',
+            html: 'Watch Party',
+            icon: <UsersIcon className="w-4 h-4" />,
+            onClick: () => window.open(`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`, '_blank')
+        });
+
+        // 6. Cast
+        items.push({
+            id: 'cast',
+            html: 'Cast to Device',
+            icon: <CastIcon className="w-4 h-4" />,
+            onClick: () => { player?.requestCast(); setActiveOverlay(null); }
+        });
+
+        // 7. Custom Settings (User Provided)
+        if (config.settings && config.settings.length > 0) {
+            items.push({ separator: true });
+            items.push(...config.settings);
+        }
+
+        items.push({ separator: true });
+
+        // 8. Appearance
+        items.push({
+            id: 'appearance',
+            html: 'Appearance',
+            icon: <PaletteIcon className="w-4 h-4" />,
+            children: [
+                {
+                    html: 'Theme',
+                    children: THEMES.map(t => ({
+                        html: t.label,
+                        active: state.theme === t.value,
+                        onClick: () => player?.setAppearance({ theme: t.value, themeColor: t.color })
+                    }))
+                },
+                {
+                    html: 'Icon Size',
+                    children: (['small', 'medium', 'large'] as const).map(s => ({
+                        html: s.charAt(0).toUpperCase() + s.slice(1),
+                        active: state.iconSize === s,
+                        onClick: () => player?.setAppearance({ iconSize: s })
+                    }))
+                },
+                {
+                    html: 'Theme Color',
+                    children: THEME_COLORS.map(c => ({
+                        html: c.label,
+                        active: state.themeColor === c.value,
+                        icon: <div className="w-3 h-3 rounded-full" style={{ backgroundColor: c.value }} />,
+                        onClick: () => player?.setAppearance({ themeColor: c.value })
+                    }))
+                }
+            ]
+        });
+
+        return items;
+    }, [
+        state.sources, state.currentSourceIndex, state.sourceStatuses,
+        state.qualityLevels, state.currentQuality, state.playbackRate,
+        state.audioTracks, state.currentAudioTrack, state.audioGain,
+        state.flipState, state.aspectRatio, state.theme, state.iconSize, state.themeColor,
+        config.settings, useFlip, useAspectRatio, src, player
+    ]);
 
     // --- Dynamic Controls Rendering ---
     const controls: ControlItem[] = useMemo(() => {
@@ -639,19 +819,38 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const renderControl = (item: ControlItem) => {
         if (!item.isBuiltIn) {
             // Render custom user control
+            // Support for nested menu popover if `children` exists
+            // Fix: Fallback ID logic must be consistent for check and toggle
+            const controlId = item.id || `ctrl-${item.index}`;
+            const isMenuOpen = activeOverlay === controlId;
+
             return (
-                <button
-                    key={item.index}
-                    onClick={() => {
-                        if (item.click) item.click(player!);
-                        else if (item.onClick) item.onClick(player!);
-                    }}
-                    className={`strata-control-btn text-zinc-300 hover:text-white transition-colors hover:bg-white/10 focus:outline-none flex items-center justify-center ${btnClass} ${item.className || ''}`}
-                    style={{ borderRadius: 'var(--radius)', ...item.style }}
-                    title={item.tooltip}
-                >
-                    <HtmlOrNode content={item.html || ''} />
-                </button>
+                <div key={item.index} className="relative">
+                    <button
+                        onClick={() => {
+                            if (item.children) {
+                                // Toggle Menu using consistent ID
+                                setActiveOverlay(isMenuOpen ? null : controlId);
+                            } else {
+                                if (item.click) item.click(player!);
+                                else if (item.onClick) item.onClick(player!);
+                            }
+                        }}
+                        className={`strata-control-btn transition-colors focus:outline-none flex items-center justify-center ${btnClass} ${isMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'} ${item.className || ''}`}
+                        style={{ borderRadius: 'var(--radius)', ...item.style }}
+                        title={item.tooltip}
+                    >
+                        <HtmlOrNode content={item.html || ''} />
+                    </button>
+                    {item.children && isMenuOpen && menuTransition.isMounted && (
+                        <MenuExplorer
+                            items={item.children}
+                            onClose={() => setActiveOverlay(null)}
+                            maxHeight={menuMaxHeight}
+                            className={`strata-backdrop ${backdropClass} ${menuTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
+                        />
+                    )}
+                </div>
             );
         }
 
@@ -693,16 +892,17 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     <div key="time" className="text-xs font-medium text-zinc-400 font-mono select-none hidden sm:block tabular-nums">{formatTime(isScrubbing ? scrubbingTime : state.currentTime)} <span className="text-zinc-600">/</span> {formatTime(state.duration)}</div>
                 );
             case 'subtitle':
+                const isSubOpen = activeOverlay === 'subtitle';
                 return (
                     <div key="subtitle" className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); setSubtitleMenuOpen(!subtitleMenuOpen); setSettingsOpen(false); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
-                        {subtitleTransition.isMounted && (
+                        <button onClick={(e) => { e.stopPropagation(); setActiveOverlay(isSubOpen ? null : 'subtitle'); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${isSubOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
+                        {isSubOpen && menuTransition.isMounted && (
                             <SubtitleMenu
                                 tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player?.setSubtitle(idx)}
-                                onUpload={(file: File) => player?.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)}
+                                onUpload={(file: File) => player?.addTextTrack(file, file.name)} onClose={() => setActiveOverlay(null)}
                                 settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player?.updateSubtitleSettings(s)}
                                 onReset={() => player?.resetSubtitleSettings()} offset={state.subtitleOffset} onOffsetChange={(val: number) => player?.setSubtitleOffset(val)}
-                                maxHeight={menuMaxHeight} animationClass={`strata-backdrop ${backdropClass} ${subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
+                                maxHeight={menuMaxHeight} animationClass={`strata-backdrop ${backdropClass} ${menuTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
                             />
                         )}
                     </div>
@@ -713,227 +913,19 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             case 'fullscreen': return <button key="fs" onClick={() => player?.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
             case 'fullscreenWeb': return <button key="fsw" onClick={() => player?.toggleWebFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
             case 'settings':
+                const isSettingsOpen = activeOverlay === 'settings';
                 return (
                     <div key="settings" className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(!settingsOpen); setSubtitleMenuOpen(false); setActiveMenu('main'); }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
-                        {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={`strata-backdrop ${backdropClass} ${settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}><div className="w-full">
-                            {activeMenu === 'main' && (
-                                <div className="animate-in slide-in-from-left-4 fade-in duration-200">
-                                    <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
-
-                                    {/* Source - Top Priority */}
-                                    {state.sources.length > 1 && (
-                                        <>
-                                            <MenuItem label="Source" icon={<ServerIcon className="w-4 h-4" />} value={state.sources[state.currentSourceIndex]?.name || `Source ${state.currentSourceIndex + 1}`} onClick={() => setActiveMenu('sources')} hasSubmenu />
-                                            <MenuDivider />
-                                        </>
-                                    )}
-
-                                    {/* Playback Configuration */}
-                                    <MenuItem label="Quality" icon={<LayersIcon className="w-4 h-4" />} value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
-                                    <MenuItem label="Speed" icon={<GaugeIcon className="w-4 h-4" />} value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
-                                    <MenuItem label="Audio" icon={<MusicIcon className="w-4 h-4" />} value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
-
-                                    <MenuDivider />
-
-                                    {/* Visual Adjustments */}
-                                    {useFlip && <MenuItem label="Flip" icon={<FlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
-                                    {useAspectRatio && <MenuItem label="Aspect Ratio" icon={<CropIcon className="w-4 h-4" />} value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
-
-                                    {/* Audio Tools */}
-                                    <MenuItem label="Audio Boost" icon={<SpeakerIcon className="w-4 h-4" />} value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
-
-                                    <MenuDivider />
-
-                                    {/* Network & Social */}
-                                    <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
-                                    <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player?.requestCast(); setSettingsOpen(false); }} />
-
-                                    {/* Custom User Settings */}
-                                    {config.settings && config.settings.length > 0 && <MenuDivider />}
-                                    {config.settings?.map((s, i) => {
-                                        // Case 1: Range (Slider)
-                                        if (s.range) {
-                                            return (
-                                                <div key={`cust-${i}`} className="px-1">
-                                                    <Slider
-                                                        label={s.html}
-                                                        icon={s.icon}
-                                                        value={s.value ?? s.min ?? 0}
-                                                        min={s.min ?? 0}
-                                                        max={s.max ?? 100}
-                                                        step={s.step ?? 1}
-                                                        onChange={(val: number) => { if (s.onRange) s.onRange(val); }}
-                                                        formatValue={s.formatValue}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        // Case 2: Toggle Switch
-                                        if (s.switch !== undefined) {
-                                            return (
-                                                <div key={`cust-${i}`} className="px-1">
-                                                    <Toggle
-                                                        label={s.html}
-                                                        icon={s.icon}
-                                                        checked={s.switch}
-                                                        tooltip={s.tooltip}
-                                                        onChange={(val: boolean) => { if (s.onSwitch) s.onSwitch(s); }}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        // Case 3: Submenu Options
-                                        if (s.options && s.id) {
-                                            return (
-                                                <MenuItem
-                                                    key={`cust-${i}`}
-                                                    label={s.html}
-                                                    icon={s.icon}
-                                                    value={s.currentValue}
-                                                    onClick={() => setActiveMenu(s.id!)}
-                                                    hasSubmenu
-                                                />
-                                            );
-                                        }
-                                        // Case 4: Simple Action
-                                        return (
-                                            <MenuItem
-                                                key={`cust-${i}`}
-                                                label={s.html}
-                                                icon={s.icon}
-                                                onClick={() => {
-                                                    if (s.click) s.click();
-                                                    else if (s.onClick) s.onClick();
-                                                    setSettingsOpen(false);
-                                                }}
-                                            />
-                                        );
-                                    })}
-
-                                    <MenuDivider />
-
-                                    {/* Appearance - Bottom */}
-                                    <MenuItem label="Appearance" icon={<PaletteIcon className="w-4 h-4" />} onClick={() => setActiveMenu('appearance')} hasSubmenu />
-                                </div>
-                            )}
-
-                            {/* Standard Submenus */}
-                            {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio'].includes(activeMenu) && (
-                                <div className="animate-in slide-in-from-right-4 fade-in duration-200">
-                                    {activeMenu === 'sources' && (
-                                        <>
-                                            <MenuHeader label="Select Source" onBack={() => setActiveMenu('main')} />
-                                            {state.sources.map((src, i) => {
-                                                const status = state.sourceStatuses[i];
-                                                const statusIcon = status === 'success'
-                                                    ? <WifiIcon className="w-3.5 h-3.5 text-emerald-500" />
-                                                    : status === 'error'
-                                                        ? <AlertCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                                                        : null;
-                                                return (
-                                                    <MenuItem
-                                                        key={i}
-                                                        label={src.name || `Source ${i + 1}`}
-                                                        value={src.type}
-                                                        active={state.currentSourceIndex === i}
-                                                        rightIcon={statusIcon}
-                                                        onClick={() => player?.switchSource(i)}
-                                                    />
-                                                );
-                                            })}
-                                        </>
-                                    )}
-                                    {activeMenu === 'speed' && (<><MenuHeader label="Speed" onBack={() => setActiveMenu('main')} />{[0.5, 1, 1.5, 2].map(rate => (<MenuItem key={rate} label={`${rate}x`} active={state.playbackRate === rate} onClick={() => player!.video.playbackRate = rate} />))}</>)}
-                                    {activeMenu === 'quality' && (<><MenuHeader label="Quality" onBack={() => setActiveMenu('main')} /><MenuItem label="Auto" active={state.currentQuality === -1} onClick={() => player?.setQuality(-1)} />{state.qualityLevels.map((lvl) => (<MenuItem key={lvl.index} label={`${lvl.height}p`} value={`${Math.round(lvl.bitrate / 1000)}k`} active={state.currentQuality === lvl.index} onClick={() => player?.setQuality(lvl.index)} />))}</>)}
-                                    {activeMenu === 'audio' && (<><MenuHeader label="Audio Track" onBack={() => setActiveMenu('main')} />{state.audioTracks.length === 0 && <div className="px-4 py-3 text-zinc-500 text-xs text-center">No tracks available</div>}{state.audioTracks.map((track) => (<MenuItem key={track.index} label={track.label} value={track.language} active={state.currentAudioTrack === track.index} onClick={() => player?.setAudioTrack(track.index)} />))}</>)}
-                                    {activeMenu === 'boost' && (<><MenuHeader label="Audio Boost" onBack={() => setActiveMenu('main')} />{[1, 1.5, 2, 3].map(gain => (<MenuItem key={gain} label={gain === 1 ? 'Off' : `${gain}x`} active={state.audioGain === gain} onClick={() => player?.setAudioGain(gain)} />))}</>)}
-                                    {activeMenu === 'flip' && (
-                                        <>
-                                            <MenuHeader label="Video Flip" onBack={() => setActiveMenu('main')} />
-                                            <div className="p-2 space-y-1">
-                                                <Toggle label="Horizontal Flip" checked={state.flipState.horizontal} onChange={() => player?.setFlip('horizontal')} />
-                                                <Toggle label="Vertical Flip" checked={state.flipState.vertical} onChange={() => player?.setFlip('vertical')} />
-                                            </div>
-                                        </>
-                                    )}
-                                    {activeMenu === 'ratio' && (
-                                        <>
-                                            <MenuHeader label="Aspect Ratio" onBack={() => setActiveMenu('main')} />
-                                            {['default', '16:9', '4:3'].map(r => (
-                                                <MenuItem key={r} label={r === 'default' ? 'Default' : r} active={state.aspectRatio === r} onClick={() => player?.setAspectRatio(r)} />
-                                            ))}
-                                        </>
-                                    )}
-                                    {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
-                                    {activeMenu === 'appearance' && (
-                                        <>
-                                            <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
-                                            <div className="pb-1">
-                                                <SettingsGroup title="Theme">
-                                                    <div className="grid grid-cols-2 gap-2 px-3">
-                                                        {THEMES.map(theme => (
-                                                            <button key={theme.value} onClick={() => player?.setAppearance({ theme: theme.value, themeColor: theme.color })} className={`py-2 text-xs font-bold uppercase tracking-wide transition-colors border-[length:var(--border-width)] border-white/10 ${state.theme === theme.value ? 'bg-[var(--accent)] text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`} style={{ borderRadius: 'var(--radius)' }}>{theme.label}</button>
-                                                        ))}
-                                                    </div>
-                                                </SettingsGroup>
-                                                <SettingsGroup title="Icon Size">
-                                                    <div className="grid grid-cols-3 gap-1 px-3">
-                                                        {(['small', 'medium', 'large'] as const).map(s => (
-                                                            <button key={s} onClick={() => player?.setAppearance({ iconSize: s })} className={`py-1.5 text-xs font-medium transition-colors ${state.iconSize === s ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 hover:text-zinc-200'}`} style={{ borderRadius: 'var(--radius)' }}>{s.charAt(0).toUpperCase() + s.slice(1)}</button>
-                                                        ))}
-                                                    </div>
-                                                </SettingsGroup>
-                                                <SettingsGroup title="Theme Color">
-                                                    <div className="grid grid-cols-6 gap-2 px-3">
-                                                        {THEME_COLORS.map(c => (
-                                                            <button key={c.value} title={c.label} onClick={() => player?.setAppearance({ themeColor: c.value })} className={`w-6 h-6 transition-transform hover:scale-110 ${state.themeColor === c.value ? 'ring-2 ring-white scale-110' : 'ring-1 ring-white/10'}`} style={{ backgroundColor: c.value, borderRadius: 'var(--radius-full)' }}>{state.themeColor === c.value && <CheckIcon className="w-3 h-3 text-white mx-auto stroke-[3]" />}</button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="px-3 pt-4">
-                                                        <div className="flex items-center gap-3 bg-white/5 p-2 hover:bg-white/10 transition-colors group" style={{ borderRadius: 'var(--radius)' }}>
-                                                            <div className="relative w-6 h-6 overflow-hidden ring-1 ring-white/20" style={{ borderRadius: 'var(--radius-full)' }}>
-                                                                <input type="color" value={state.themeColor} onChange={(e) => player?.setAppearance({ themeColor: e.target.value })} className="absolute inset-[-4px] w-[150%] h-[150%] cursor-pointer p-0 border-0" />
-                                                            </div>
-                                                            <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-200">Custom Color</span>
-                                                            <span className="text-[10px] font-mono text-zinc-500 ml-auto uppercase">{state.themeColor}</span>
-                                                        </div>
-                                                    </div>
-                                                </SettingsGroup>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Dynamic Custom Submenus */}
-                            {config.settings?.map((s, i) => {
-                                if (s.options && s.id && activeMenu === s.id) {
-                                    return (
-                                        <div key={`submenu-${i}`} className="animate-in slide-in-from-right-4 fade-in duration-200">
-                                            <MenuHeader
-                                                label={typeof s.html === 'string' ? s.html : 'Settings'}
-                                                onBack={() => setActiveMenu('main')}
-                                            />
-                                            {s.options.map((opt, optIndex) => (
-                                                <MenuItem
-                                                    key={optIndex}
-                                                    label={opt.label}
-                                                    value={opt.value}
-                                                    icon={opt.icon}
-                                                    active={opt.default || s.currentValue === opt.value}
-                                                    onClick={() => {
-                                                        if (s.onSelect) s.onSelect(opt, optIndex);
-                                                        setActiveMenu('main'); // Auto-close submenu or keep open? Standard is usually close to parent or close all. Here going back to main.
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
-                                    );
-                                }
-                                return null;
-                            })}
-                        </div></Menu>)}
+                        <button onClick={(e) => { e.stopPropagation(); setActiveOverlay(isSettingsOpen ? null : 'settings'); }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${isSettingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
+                        {isSettingsOpen && menuTransition.isMounted && (
+                            <MenuExplorer
+                                items={settingsTree}
+                                title="Settings"
+                                onClose={() => setActiveOverlay(null)}
+                                maxHeight={menuMaxHeight}
+                                className={`strata-backdrop ${backdropClass} ${menuTransition.isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}`}
+                            />
+                        )}
                     </div>
                 );
             default: return null;
@@ -1004,7 +996,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor, '--accent-contrast': accentContrast } as React.CSSProperties}
             onMouseMove={handleMouseMove}
-            onMouseLeave={() => { if (state.isPlaying && !settingsOpen && !subtitleMenuOpen && player) player.setControlsVisible(false); }}
+            onMouseLeave={() => { if (state.isPlaying && !activeOverlay && player) player.setControlsVisible(false); }}
 
             // Mouse Events
             onMouseDown={startFastForward}
@@ -1203,9 +1195,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${state.controlsVisible || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         >
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all duration-300 active:scale-90 active:opacity-80 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
-                                <button onClick={(e) => { e.stopPropagation(); setSettingsOpen(false); setSubtitleMenuOpen(false); triggerSkip('forward'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Forward10Icon className={center.skipIcon} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setActiveOverlay(null); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setActiveOverlay(null); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all duration-300 active:scale-90 active:opacity-80 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
+                                <button onClick={(e) => { e.stopPropagation(); setActiveOverlay(null); triggerSkip('forward'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Forward10Icon className={center.skipIcon} /></button>
                             </div>
                         </div>
                     ) : null}
@@ -1214,13 +1206,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     <div
                         className={`absolute inset-x-0 bottom-0 z-30 transition-all duration-300 px-4 md:px-6 py-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent ${isControlsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
                         onClick={(e) => {
-                            if (settingsOpen || subtitleMenuOpen) {
-                                setSettingsOpen(false);
-                                setSubtitleMenuOpen(false);
+                            if (activeOverlay) {
+                                setActiveOverlay(null);
                             }
-                            // Only stop prop if we are not closing menus, or do we want clicks on bar to NEVER toggle play?
-                            // Standard behavior: Clicking empty space on control bar does nothing (stops prop).
-                            // But we added menu closing logic above.
                             if (e.target === e.currentTarget) {
                                 setIsVolumeLocked(false);
                             }
