@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem } from '../core/StrataCore';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
@@ -184,6 +184,40 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const volumeBarRef = useRef<HTMLDivElement>(null);
     const animationCleanupRef = useRef<any>(null);
 
+    // Force re-attach player to container when WebFullscreen toggles (Portal)
+    useLayoutEffect(() => {
+        if (player && containerRef.current) {
+            player.attach(containerRef.current);
+        }
+    }, [player, state.isWebFullscreen]);
+
+    // Separate ResizeObserver to ensure it tracks the correct DOM node through portal transitions
+    useLayoutEffect(() => {
+        if (!containerRef.current) return;
+
+        const updateDims = () => {
+            if (containerRef.current) {
+                setPlayerHeight(containerRef.current.clientHeight);
+                setPlayerWidth(containerRef.current.clientWidth);
+            }
+        };
+
+        // Initialize size immediately
+        updateDims();
+
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                setPlayerHeight(entry.contentRect.height);
+                setPlayerWidth(entry.contentRect.width);
+            }
+        });
+        observer.observe(containerRef.current);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [state.isWebFullscreen]); // Re-bind when portal state changes
+
     useEffect(() => {
         setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -200,20 +234,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         setPlayer(core);
         if (onGetInstance) onGetInstance(core);
 
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                setPlayerHeight(entry.contentRect.height);
-                setPlayerWidth(entry.contentRect.width);
-            }
-        });
-        observer.observe(containerRef.current);
+        // Core Init complete
 
         return () => {
-            observer.disconnect();
             core.destroy();
             setPlayer(null);
         };
-    }, []);
+    }, []); // Only runs once on mount to setup Core
 
     // Reactive Prop Updates
     useEffect(() => {

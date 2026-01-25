@@ -762,19 +762,27 @@ export class StrataCore {
   // --- Core Methods ---
 
   attach(container: HTMLElement) {
-    this.container = container;
-    if (!this.container.contains(this.video)) {
-      this.video.style.width = '100%';
-      this.video.style.height = '100%';
-      this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
-      this.video.style.backgroundColor = 'black';
-      this.container.appendChild(this.video);
+    // 1. Cleanup old observer to prevent memory leaks or zombie updates
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
     }
+
+    this.container = container;
+
+    // 2. Force append the video to the new container. 
+    // appendChild moves the node if it is already in the DOM, solving the portal detach issue.
+    this.container.appendChild(this.video);
+
+    // 3. Re-apply critical styles to ensure the video fills the new container
+    this.video.style.width = '100%';
+    this.video.style.height = '100%';
+    this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
+    this.video.style.backgroundColor = 'black';
 
     // Apply potentially persisted aspect ratio
     this.updateAspectRatio();
 
-    // Setup Resize Observer
+    // 4. Setup new Resize Observer
     this.resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         this.emit('resize', { width: entry.contentRect.width, height: entry.contentRect.height });
