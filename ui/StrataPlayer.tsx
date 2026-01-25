@@ -488,13 +488,12 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
 
         // Close menus on outside click. If menus were open, stop here (don't toggle play/seek).
-        if (settingsOpen || subtitleMenuOpen || activeControlId) {
+        if (settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible) {
             closeAllMenus();
             return;
         }
 
         if (isVolumeLocked) setIsVolumeLocked(false);
-        if (contextMenu.visible) setContextMenu({ ...contextMenu, visible: false });
 
         // Wake up controls so lock button is visible if locked
         player.setControlsVisible(true);
@@ -528,6 +527,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent container click from firing
         if (state.isLocked) return;
 
         // Close other menus first
@@ -536,10 +536,14 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        setContextMenu({
-            visible: true,
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+        // Small timeout to allow state updates (closeAllMenus) to propagate
+        // before opening the new context menu
+        requestAnimationFrame(() => {
+            setContextMenu({
+                visible: true,
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            });
         });
     };
 
@@ -611,7 +615,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     // Bottom Controls Visibility: Show if paused, or actively showing controls, or menus open. 
     // HIDDEN IF LOCKED.
     // Use state.controlsVisible from Core to sync with external listeners (like ArtPlayer consumers)
-    const isControlsVisible = !state.isLocked && (state.controlsVisible || !state.isPlaying || settingsOpen || subtitleMenuOpen || activeControlId);
+    const isControlsVisible = !state.isLocked && (state.controlsVisible || !state.isPlaying || settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible);
     const isVolumeVisible = isVolumeHovered || isVolumeScrubbing || isVolumeLocked;
 
     const backdropClass = isBackdrop ? 'backdrop-blur-xl bg-black/80' : 'bg-black/95';
@@ -755,7 +759,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             case 'screenshot': return <button key="ss" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.screenshot(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Screenshot"><CameraIcon className={iconClass} /></button>;
             case 'pip': return <button key="pip" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.togglePip(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>;
             case 'download': return <button key="dl" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.download(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
-            case 'fullscreen': return <button key="fs" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
+            case 'fullscreen': return <button key="fs" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{(state.isFullscreen || state.isWebFullscreen) ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
             case 'fullscreenWeb': return <button key="fsw" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleWebFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
             case 'settings':
                 return (

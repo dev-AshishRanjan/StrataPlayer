@@ -981,25 +981,28 @@ export class StrataCore {
   async toggleFullscreen() {
     if (!this.container) return;
 
-    // Check internal state if we are in web fullscreen already
+    // 1. If currently native fullscreen, exit it.
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => { });
+      // Orientation lock handled in event listener
+      return;
+    }
+
+    // 2. If currently web fullscreen, toggle it off.
     if (this.store.get().isWebFullscreen) {
       this.toggleWebFullscreen();
       return;
     }
 
+    // 3. Try to enter native fullscreen.
     try {
-      if (!document.fullscreenElement) {
-        await this.container.requestFullscreen();
-        // Orientation lock handled in boundFullscreenChange
-      } else {
-        await document.exitFullscreen();
-      }
+      await this.container.requestFullscreen();
+      // Orientation lock handled in boundFullscreenChange
     } catch (err) {
-      // Fallback to web fullscreen if native fails or is blocked (e.g. inside restrictive iframes)
-      if (!document.fullscreenElement) {
-        console.warn('Native fullscreen failed, falling back to Web Fullscreen', err);
-        this.toggleWebFullscreen();
-      }
+      // 4. Fallback: If native fails (e.g. inside restrictive iframe), force Web Fullscreen.
+      // This ensures the user gets a fullscreen-like experience regardless of browser limitations.
+      console.warn('Native fullscreen failed, falling back to Web Fullscreen', err);
+      this.toggleWebFullscreen();
     }
   }
 
