@@ -94,6 +94,8 @@ export const ContextMenu = ({ x, y, items, onClose, containerWidth, containerHei
         borderRadius: 'var(--radius-lg)'
       }}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
       {items.map((item, index) => {
         // Separator Logic: 0 height with top border for a crisp line

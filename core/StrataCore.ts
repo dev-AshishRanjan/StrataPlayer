@@ -771,10 +771,14 @@ export class StrataCore {
       this.container.appendChild(this.video);
     }
 
+    // Apply potentially persisted aspect ratio
+    this.updateAspectRatio();
+
     // Setup Resize Observer
     this.resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         this.emit('resize', { width: entry.contentRect.width, height: entry.contentRect.height });
+        this.updateAspectRatio();
       }
     });
     this.resizeObserver.observe(this.container);
@@ -976,6 +980,13 @@ export class StrataCore {
 
   async toggleFullscreen() {
     if (!this.container) return;
+
+    // Check internal state if we are in web fullscreen already
+    if (this.store.get().isWebFullscreen) {
+      this.toggleWebFullscreen();
+      return;
+    }
+
     try {
       if (!document.fullscreenElement) {
         await this.container.requestFullscreen();
@@ -984,7 +995,11 @@ export class StrataCore {
         await document.exitFullscreen();
       }
     } catch (err) {
-      console.error('Fullscreen toggle failed', err);
+      // Fallback to web fullscreen if native fails or is blocked (e.g. inside restrictive iframes)
+      if (!document.fullscreenElement) {
+        console.warn('Native fullscreen failed, falling back to Web Fullscreen', err);
+        this.toggleWebFullscreen();
+      }
     }
   }
 
@@ -1059,19 +1074,53 @@ export class StrataCore {
   }
 
   setAspectRatio(ratio: string) {
-    // ratio: 'default' | '16:9' | '4:3'
     this.store.setState({ aspectRatio: ratio });
+    this.updateAspectRatio();
 
-    if (ratio === 'default') {
-      this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
-      // Reset explicit sizing
+    if (ratio !== 'default') {
+      this.notify({ type: 'info', message: `Aspect Ratio: ${ratio}`, duration: 2000 });
+    }
+  }
+
+  private updateAspectRatio() {
+    if (!this.container) return;
+    const { aspectRatio, isAutoSized } = this.store.get();
+
+    if (aspectRatio === 'default') {
       this.video.style.width = '100%';
       this.video.style.height = '100%';
+      this.video.style.objectFit = isAutoSized ? 'cover' : 'contain';
       return;
     }
 
-    this.video.style.objectFit = 'contain';
-    this.notify({ type: 'info', message: `Aspect Ratio: ${ratio} (CSS support limited)`, duration: 2000 });
+    const [w, h] = aspectRatio.split(':').map(Number);
+    if (!w || !h) return;
+
+    const targetRatio = w / h;
+    const rect = this.container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const containerRatio = rect.width / rect.height;
+
+    let finalW, finalH;
+
+    // To maintain aspect ratio completely visible within container but stretched to fill that ratio
+    // We size the box to the largest rectangle of targetRatio that fits in container.
+    if (containerRatio > targetRatio) {
+      // Container is wider (e.g. 21:9 container, 16:9 video)
+      // Video height = container height. Video width = height * ratio.
+      finalH = rect.height;
+      finalW = finalH * targetRatio;
+    } else {
+      // Container is narrower (e.g. 4:3 container, 16:9 video)
+      // Video width = container width. Video height = width / ratio.
+      finalW = rect.width;
+      finalH = finalW / targetRatio;
+    }
+
+    this.video.style.width = `${finalW}px`;
+    this.video.style.height = `${finalH}px`;
+    this.video.style.objectFit = 'fill';
   }
 
   private initCast() {

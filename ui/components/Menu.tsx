@@ -42,6 +42,8 @@ export const Menu = ({ children, onClose, align = 'right', maxHeight, className 
       className={`absolute bottom-full mb-4 ${positionClasses} bg-[var(--bg-panel)] backdrop-blur-xl border-[length:var(--border-width)] border-white/10 shadow-2xl overflow-hidden w-[300px] max-w-[calc(100vw-32px)] text-sm z-50 ring-1 ring-white/5 font-[family-name:var(--font-main)] flex flex-col p-1.5 transition-[height,opacity,transform] duration-300 ease-out ${className}`}
       style={{ ...calculatedStyle, borderRadius: 'var(--radius-lg)' }}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
       <div className="overflow-y-auto hide-scrollbar flex-1" style={{ borderRadius: 'var(--radius)' }}>
         <div ref={contentRef}>{children}</div>

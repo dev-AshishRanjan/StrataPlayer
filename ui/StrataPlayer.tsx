@@ -149,6 +149,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         setSettingsOpen(false);
         setSubtitleMenuOpen(false);
         setActiveControlId(null);
+        setContextMenu(prev => ({ ...prev, visible: false }));
         // We generally don't reset activeMenu so if user re-opens settings they are where they left off, 
         // or you can reset it: setActiveMenu('main');
     }, []);
@@ -417,6 +418,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
+        e.stopPropagation();
         if (state.isLocked) return;
 
         // Ensure menus close when interacting with progress bar
@@ -445,6 +447,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     };
 
     const handleVolumeStart = (e: React.MouseEvent | React.TouchEvent) => {
+        e.stopPropagation();
         if (!player || state.isLocked) return;
         setIsVolumeScrubbing(true);
         player.setVolume(calculateVolumeFromEvent(e));
@@ -527,6 +530,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         e.preventDefault();
         if (state.isLocked) return;
 
+        // Close other menus first
+        closeAllMenus();
+
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
@@ -539,6 +545,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     const handleVolumeIconClick = (e: React.MouseEvent | React.TouchEvent) => {
         e.stopPropagation();
+        closeAllMenus(); // Close context menu if open
 
         if (isVolumeLocked) {
             setIsVolumeLocked(false);
@@ -659,6 +666,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             return (
                 <div key={item.index} className="relative">
                     <button
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
                         onClick={(e) => {
                             e.stopPropagation();
                             if (item.children) {
@@ -667,6 +676,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                 closeAllMenus();
                                 if (!wasOpen) setActiveControlId(controlId);
                             } else {
+                                closeAllMenus(); // Close context menu
                                 if (item.click) item.click(player!);
                                 else if (item.onClick) item.onClick(player!);
                             }
@@ -694,7 +704,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         switch (item.id) {
             case 'play':
                 return (
-                    <button key="play" onClick={() => player?.togglePlay()} className={`strata-control-btn text-zinc-300 hover:text-white transition-colors hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>
+                    <button key="play" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.togglePlay(); }} className={`strata-control-btn text-zinc-300 hover:text-white transition-colors hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>
                         {state.isPlaying ? <PauseIcon className={`${iconClass} fill-current`} /> : <PlayIcon className={`${iconClass} fill-current`} />}
                     </button>
                 );
@@ -704,7 +714,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         onMouseEnter={() => { if (window.matchMedia('(hover: hover)').matches) setIsVolumeHovered(true); }}
                         onMouseLeave={() => { if (window.matchMedia('(hover: hover)').matches) setIsVolumeHovered(false); }}
                     >
-                        <button onClick={handleVolumeIconClick} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>
+                        <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={handleVolumeIconClick} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>
                             <VolIcon className={iconClass} />
                         </button>
                         <div className={`relative h-8 flex items-center transition-all duration-300 ease-out overflow-hidden ${isVolumeVisible ? 'w-28 opacity-100 ml-1' : 'w-0 opacity-0'}`}>
@@ -730,7 +740,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             case 'subtitle':
                 return (
                     <div key="subtitle" className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); const wasOpen = subtitleMenuOpen; closeAllMenus(); if (!wasOpen) setSubtitleMenuOpen(true); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
+                        <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const wasOpen = subtitleMenuOpen; closeAllMenus(); if (!wasOpen) setSubtitleMenuOpen(true); }} className={`strata-control-btn transition-colors focus:outline-none ${btnClass} ${subtitleMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SubtitleIcon className={iconClass} /></button>
                         {subtitleTransition.isMounted && (
                             <SubtitleMenu
                                 tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player?.setSubtitle(idx)}
@@ -742,15 +752,15 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         )}
                     </div>
                 );
-            case 'screenshot': return <button key="ss" onClick={() => player?.screenshot()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Screenshot"><CameraIcon className={iconClass} /></button>;
-            case 'pip': return <button key="pip" onClick={() => player?.togglePip()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>;
-            case 'download': return <button key="dl" onClick={() => player?.download()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
-            case 'fullscreen': return <button key="fs" onClick={() => player?.toggleFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
-            case 'fullscreenWeb': return <button key="fsw" onClick={() => player?.toggleWebFullscreen()} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
+            case 'screenshot': return <button key="ss" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.screenshot(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Screenshot"><CameraIcon className={iconClass} /></button>;
+            case 'pip': return <button key="pip" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.togglePip(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>;
+            case 'download': return <button key="dl" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.download(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
+            case 'fullscreen': return <button key="fs" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{state.isFullscreen ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
+            case 'fullscreenWeb': return <button key="fsw" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleWebFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
             case 'settings':
                 return (
                     <div key="settings" className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); const wasOpen = settingsOpen; closeAllMenus(); if (!wasOpen) { setSettingsOpen(true); setActiveMenu('main'); } }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
+                        <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const wasOpen = settingsOpen; closeAllMenus(); if (!wasOpen) { setSettingsOpen(true); setActiveMenu('main'); } }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
                         {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={`strata-backdrop ${backdropClass} ${settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300' : 'opacity-0 translate-y-2 scale-95 duration-300'}`}><div className="w-full">
                             {activeMenu === 'main' && (
                                 <div className="animate-in slide-in-from-left-4 fade-in duration-200">
@@ -1010,7 +1020,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         <div
             id={config.id}
             ref={containerRef}
-            className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius)]'} ${config.container || ''}`}
+            className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset flex items-center justify-center ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius)]'} ${config.container || ''}`}
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor, '--accent-contrast': accentContrast } as React.CSSProperties}
             onMouseMove={handleMouseMove}
@@ -1185,6 +1195,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {/* Mobile Lock Button */}
                     {useLock && isMobile && state.controlsVisible && (
                         <button
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); player.toggleLock(); }}
                             className={`absolute left-4 md:left-6 bottom-24 md:bottom-28 z-50 p-3 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white transition-all active:scale-95 ${state.isLocked ? 'text-[var(--accent)] bg-white/10' : 'hover:bg-white/10'}`}
                         >
@@ -1213,9 +1225,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-300 pointer-events-none ${state.controlsVisible || !state.isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         >
                             <div className="flex items-center gap-8 md:gap-16 pointer-events-auto">
-                                <button onClick={(e) => { e.stopPropagation(); closeAllMenus(); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); closeAllMenus(); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all duration-300 active:scale-90 active:opacity-80 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
-                                <button onClick={(e) => { e.stopPropagation(); closeAllMenus(); triggerSkip('forward'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Forward10Icon className={center.skipIcon} /></button>
+                                <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); triggerSkip('rewind'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Replay10Icon className={center.skipIcon} /></button>
+                                <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player.togglePlay(); }} className={`group relative flex items-center justify-center rounded-full bg-white/10 hover:bg-[var(--accent)] border border-white/10 shadow-2xl transition-all duration-300 active:scale-90 active:opacity-80 focus:outline-none backdrop-blur-md ${center.playBtn}`}>{state.isPlaying ? <PauseIcon className={`${center.playIcon} text-white fill-current`} /> : <PlayIcon className={`${center.playIcon} text-white ml-1 fill-current`} />}</button>
+                                <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); triggerSkip('forward'); }} className={`group flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 border border-white/10 transition-all duration-300 active:scale-125 active:opacity-80 text-white/90 focus:outline-none backdrop-blur-sm ${center.skipBtn}`}><Forward10Icon className={center.skipIcon} /></button>
                             </div>
                         </div>
                     ) : null}
