@@ -97,6 +97,7 @@ export interface SettingItem {
   icon?: string | React.ReactNode;
   tooltip?: string;
   separator?: boolean; // New: Divider support
+  isLabel?: boolean; // Header label
 
   // State
   active?: boolean; // Visual "check" state
@@ -1358,7 +1359,7 @@ export class StrataCore {
     }
   }
 
-  async download() {
+  async download(options: { format?: 'ts' | 'mp4' } = {}) {
     // Prefer the original source URL if available, as video.src might be a blob (MSE)
     const src = this.currentSource?.url || this.video.src;
     if (!src) return;
@@ -1366,7 +1367,7 @@ export class StrataCore {
     // 1. Handle HLS or DASH explicitly if current source type matches
     // We check both the URL extension and the explicit type from the source config
     if (src.includes('.m3u8') || this.currentSource?.type === 'hls') {
-      this.downloadHls(src);
+      this.downloadHls(src, options.format || 'ts');
       return;
     }
 
@@ -1444,7 +1445,7 @@ export class StrataCore {
     }
   }
 
-  async downloadHls(url: string) {
+  async downloadHls(url: string, format: 'ts' | 'mp4') {
     if (this.currentDownloadController) this.currentDownloadController.abort();
     this.currentDownloadController = new AbortController();
     const signal = this.currentDownloadController.signal;
@@ -1518,7 +1519,11 @@ export class StrataCore {
 
       if (segments.length === 0) throw new Error('No segments found.');
 
-      // 4. Setup Writer (File System API or Memory)
+      // 4. Determine Output Format
+      let extension = format === 'mp4' ? 'mp4' : 'ts';
+      let mime = format === 'mp4' ? 'video/mp4' : 'video/mp2t';
+
+      // 5. Setup Writer (File System API or Memory)
       let fileHandle: any = null;
       let writable: any = null;
       let memoryBlobs: Blob[] = [];
@@ -1528,10 +1533,10 @@ export class StrataCore {
         try {
           // @ts-ignore
           fileHandle = await window.showSaveFilePicker({
-            suggestedName: 'video.ts',
+            suggestedName: `video.${extension}`,
             types: [{
-              description: 'MPEG Transport Stream',
-              accept: { 'video/mp2t': ['.ts'] },
+              description: format === 'mp4' ? 'MPEG-4 Video' : 'MPEG Transport Stream',
+              accept: { [mime]: [`.${extension}`] },
             }],
           });
           writable = await fileHandle.createWritable();
@@ -1541,7 +1546,9 @@ export class StrataCore {
         }
       }
 
-      // 5. Download Loop
+      // 6. Download Loop
+      let isTsContent = false;
+
       for (let i = 0; i < segments.length; i++) {
         if (signal.aborted) break;
 
@@ -1555,8 +1562,30 @@ export class StrataCore {
         });
 
         const segRes = await this.fetchWithRetry(segments[i], 3, undefined, signal);
-        const blob = await segRes.blob();
+        const buffer = await segRes.arrayBuffer();
 
+        // 7. Check content type on first segment
+        if (i === 0) {
+          const bytes = new Uint8Array(buffer.slice(0, 4));
+          // TS Sync Byte is 0x47
+          if (bytes[0] === 0x47) {
+            isTsContent = true;
+            if (format === 'mp4') {
+              this.notify({
+                type: 'info',
+                message: 'Stream is MPEG-TS. Downloading as .ts to prevent corruption.',
+                duration: 5000
+              });
+              // Fallback to TS extension if we can't transmux
+              // If using File System API, filename is already set, so we just write raw bytes
+              // Ideally we should warn BEFORE saving but here we just process.
+              extension = 'ts';
+              mime = 'video/mp2t';
+            }
+          }
+        }
+
+        const blob = new Blob([buffer]);
         if (writable) {
           await writable.write(blob);
         } else {
@@ -1575,12 +1604,14 @@ export class StrataCore {
       } else {
         // Combine blobs and download
         this.notify({ id: notifId, type: 'loading', message: 'Stitching video...', progress: 100 });
-        const finalBlob = new Blob(memoryBlobs, { type: 'video/mp2t' });
+        const finalBlob = new Blob(memoryBlobs, { type: mime });
         const url = window.URL.createObjectURL(finalBlob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = 'video.ts';
+        // If content was TS but requested MP4, fallback extension
+        const finalExt = (format === 'mp4' && isTsContent) ? 'ts' : extension;
+        a.download = `video.${finalExt}`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);

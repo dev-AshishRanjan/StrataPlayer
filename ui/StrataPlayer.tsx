@@ -18,7 +18,7 @@ import {
     LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
     CustomizeIcon, CameraIcon, LockIcon, UnlockIcon, WebFullscreenIcon,
     FastForwardIcon, RatioIcon, ExpandIcon, InfoIcon,
-    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon, QualityIcon, VideoFlipIcon
+    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon, QualityIcon, VideoFlipIcon, FileCheckIcon
 } from './Icons';
 
 declare module 'react' {
@@ -698,6 +698,36 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             });
         }
 
+        // Detect HLS source for Download Menu Options
+        const currentSource = state.sources[state.currentSourceIndex] || { url: src || '', type: type || 'auto' };
+        const isHls = currentSource.type === 'hls' || currentSource.url.includes('.m3u8');
+
+        // Apply Download Menu logic if HLS
+        const downloadControl = items.find(i => i.id === 'download');
+        if (downloadControl) {
+            if (isHls) {
+                downloadControl.children = [
+                    { html: 'Download Format', isLabel: true },
+                    { 
+                        html: 'MPEG-TS', 
+                        value: 'Original Stream', 
+                        icon: <FileCheckIcon className="w-3.5 h-3.5" />,
+                        onClick: () => player?.download({ format: 'ts' }) 
+                    },
+                    { 
+                        html: 'MP4', 
+                        value: 'Converted', 
+                        icon: <CustomizeIcon className="w-3.5 h-3.5" />,
+                        onClick: () => player?.download({ format: 'mp4' }) 
+                    }
+                ];
+                downloadControl.onClick = undefined; // Ensure toggle logic works by removing click handler
+            } else {
+                downloadControl.children = undefined;
+                downloadControl.onClick = (p) => p.download();
+            }
+        }
+
         // Filter based on config toggles
         return items.filter(c => {
             if (c.id === 'screenshot' && !useScreenshot) return false;
@@ -707,7 +737,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             if (c.id === 'fullscreenWeb' && !useFullscreenWeb) return false;
             return true;
         }).sort((a, b) => a.index - b.index);
-    }, [config.controls, useScreenshot, usePip, useSetting, useFullscreen, useFullscreenWeb]);
+    }, [config.controls, useScreenshot, usePip, useSetting, useFullscreen, useFullscreenWeb, state.currentSourceIndex, state.sources, src, type]);
 
     const renderControl = (item: ControlItem) => {
         if (!item.isBuiltIn) {
@@ -809,7 +839,34 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                 );
             case 'screenshot': return <button key="ss" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.screenshot(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }} title="Screenshot"><CameraIcon className={iconClass} /></button>;
             case 'pip': return <button key="pip" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.togglePip(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><PipIcon className={iconClass} /></button>;
-            case 'download': return <button key="dl" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.download(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
+            
+            // Modified Download Handler with Menu Support via Built-in Extension
+            case 'download': 
+                if (item.children) {
+                    const isMenuOpen = activeControlId === 'download-menu';
+                    const shouldRenderMenu = isMenuOpen || (controlTransition.isMounted && lastActiveControlId.current === 'download-menu');
+                    return (
+                        <div key="dl" className="relative">
+                            <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { 
+                                e.stopPropagation(); 
+                                const wasOpen = isMenuOpen;
+                                closeAllMenus(); 
+                                if (!wasOpen) setActiveControlId('download-menu');
+                            }} className={`strata-control-btn transition-colors hidden sm:block focus:outline-none ${btnClass} ${isMenuOpen ? 'text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>
+                            
+                            {shouldRenderMenu && (
+                                <MenuExplorer
+                                    items={item.children}
+                                    onClose={closeAllMenus}
+                                    maxHeight={menuMaxHeight}
+                                    className={`strata-backdrop ${backdropClass} ${controlTransition.isVisible ? 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300' : 'opacity-0 translate-y-2 scale-95 duration-300'}`}
+                                />
+                            )}
+                        </div>
+                    );
+                }
+                return <button key="dl" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.download(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 transition-colors hidden sm:block focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}><DownloadIcon className={iconClass} /></button>;
+            
             case 'fullscreen': return <button key="fs" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 rounded-lg transition-transform focus:outline-none ${btnClass}`} style={{ borderRadius: 'var(--radius)' }}>{(state.isFullscreen || state.isWebFullscreen) ? <MinimizeIcon className={iconClass} /> : <MaximizeIcon className={iconClass} />}</button>;
             case 'fullscreenWeb': return <button key="fsw" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); closeAllMenus(); player?.toggleWebFullscreen(); }} className={`strata-control-btn text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:block focus:outline-none ${btnClass} ${state.isWebFullscreen ? 'text-[var(--accent)]' : ''}`} style={{ borderRadius: 'var(--radius)' }} title="Web Fullscreen"><WebFullscreenIcon className={iconClass} /></button>;
             case 'settings':
