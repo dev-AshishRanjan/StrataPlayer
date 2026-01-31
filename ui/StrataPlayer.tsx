@@ -297,7 +297,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (player && autoPlay) {
             player.play().catch(() => {
                 // Autoplay blocked handling
-                player.pause(); // Ensure UI state is consistent
+                player.pause(); 
+                // Explicitly sync state because video.pause() might not trigger event if already paused/failed
+                player.store.setState({ isPlaying: false, isBuffering: false });
                 player.notify({ type: 'warning', message: 'Autoplay blocked by browser. Click play to start.', duration: 5000 });
             });
         }

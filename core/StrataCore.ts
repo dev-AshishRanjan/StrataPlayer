@@ -771,13 +771,16 @@ export class StrataCore {
 
   // Helper to ensure subtitle content is VTT
   private convertToVTT(content: string): string {
-    // Check for SRT style timestamps or lack of header
-    if (!content.trim().startsWith('WEBVTT')) {
+    let text = content.trim();
+    if (!text.startsWith('WEBVTT')) {
       // Replace SRT comma timestamps (00:00:20,000) with VTT dot timestamps (00:00:20.000)
-      let vtt = content.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+      // Robust Regex for SRT -> VTT: (\d+:\d{2}:\d{2}),(\d{3}) -> 1:02:03.400 (Flexible hours)
+      let vtt = text.replace(/(\d+:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+      // Regex: (\d{2}:\d{2}),(\d{3}) -> 02:03.400 (MM:SS,mmm - optional hours)
+      vtt = vtt.replace(/(\d{2}:\d{2}),(\d{3})/g, '$1.$2');
       return 'WEBVTT\n\n' + vtt;
     }
-    return content;
+    return text;
   }
 
   // --- Core Methods ---
@@ -1282,7 +1285,8 @@ export class StrataCore {
         const blobUrl = URL.createObjectURL(blob);
 
         // Add to DOM
-        this.addTextTrackInternal(blobUrl, targetTrack.label, targetTrack.srcLang, targetTrack.isDefault || false);
+        // Don't set isDefault here to avoid browser auto-enabling it before we set the correct mode
+        this.addTextTrackInternal(blobUrl, targetTrack.label, targetTrack.srcLang, false);
         this.updateSubtitleTrackState(index, { status: 'success' });
       } catch (e) {
         this.updateSubtitleTrackState(index, { status: 'error' });
@@ -1293,8 +1297,14 @@ export class StrataCore {
 
     // 3. Enable the track in DOM
     // We find the track by label/srclang since DOM index might vary
+    // If multiple tracks match, we try to use the one that is currently disabled (not active) or just the last one added
     const domTracks = Array.from(this.video.textTracks);
-    const track = domTracks.find(t => t.label === targetTrack.label && t.language === targetTrack.srcLang);
+    
+    // Robust finding: prefer matching label AND lang, fallback to label only
+    let track = domTracks.find(t => t.label === targetTrack.label && t.language === targetTrack.srcLang);
+    if (!track) {
+        track = domTracks.find(t => t.label === targetTrack.label);
+    }
 
     if (track) {
       const settings = this.store.get().subtitleSettings;
