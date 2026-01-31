@@ -1359,9 +1359,18 @@ export class StrataCore {
   }
 
   async download() {
-    if (!this.video.src) return;
-    const src = this.video.src;
-    if (src.includes('blob:') || src.includes('.m3u8')) {
+    // Prefer the original source URL if available, as video.src might be a blob (MSE)
+    const src = this.currentSource?.url || this.video.src;
+    if (!src) return;
+
+    // 1. Handle HLS or DASH explicitly if current source type matches
+    // We check both the URL extension and the explicit type from the source config
+    if (src.includes('.m3u8') || this.currentSource?.type === 'hls') {
+      this.downloadHls(src);
+      return;
+    }
+
+    if (src.startsWith('blob:')) {
       this.notify({ type: 'warning', message: 'Stream download not supported in browser.', duration: 4000 });
       return;
     }
@@ -1429,6 +1438,161 @@ export class StrataCore {
         this.notify({ id: notifId, type: 'error', message: 'Download failed.', duration: 4000 });
         // Fallback
         window.open(src, '_blank');
+      }
+    } finally {
+      this.currentDownloadController = null;
+    }
+  }
+
+  async downloadHls(url: string) {
+    if (this.currentDownloadController) this.currentDownloadController.abort();
+    this.currentDownloadController = new AbortController();
+    const signal = this.currentDownloadController.signal;
+
+    const notifId = this.notify({
+      type: 'loading',
+      message: 'Analyzing HLS stream...',
+      progress: 0,
+      action: { label: 'Cancel', onClick: () => this.cancelDownload() }
+    });
+
+    try {
+      // 1. Fetch Playlist
+      let response = await this.fetchWithRetry(url, 3, undefined, signal);
+      let content = await response.text();
+      let baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+
+      // 2. Check for Master Playlist
+      if (content.includes('#EXT-X-STREAM-INF')) {
+        this.notify({ id: notifId, type: 'loading', message: 'Selecting best quality...', progress: 0 });
+        // Parse variants
+        const lines = content.split('\n');
+        let bestBandwidth = 0;
+        let bestUrl = '';
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes('#EXT-X-STREAM-INF')) {
+            const bandwidthMatch = lines[i].match(/BANDWIDTH=(\d+)/);
+            if (bandwidthMatch) {
+              const bandwidth = parseInt(bandwidthMatch[1]);
+              // Next line is URL
+              let nextLine = lines[i + 1]?.trim();
+              if (nextLine && !nextLine.startsWith('#')) {
+                if (bandwidth > bestBandwidth) {
+                  bestBandwidth = bandwidth;
+                  bestUrl = nextLine;
+                }
+              }
+            }
+          }
+        }
+
+        if (bestUrl) {
+          // Handle relative URL
+          if (!bestUrl.startsWith('http')) {
+            bestUrl = baseUrl + bestUrl;
+          }
+          // Fetch best variant playlist
+          response = await this.fetchWithRetry(bestUrl, 3, undefined, signal);
+          content = await response.text();
+          baseUrl = bestUrl.substring(0, bestUrl.lastIndexOf('/') + 1);
+        }
+      }
+
+      // 3. Parse Segments
+      if (content.includes('#EXT-X-KEY')) {
+        throw new Error('Encrypted HLS streams are not supported for download.');
+      }
+
+      const lines = content.split('\n');
+      const segments: string[] = [];
+      for (let line of lines) {
+        line = line.trim();
+        if (line && !line.startsWith('#')) {
+          if (!line.startsWith('http')) {
+            segments.push(baseUrl + line);
+          } else {
+            segments.push(line);
+          }
+        }
+      }
+
+      if (segments.length === 0) throw new Error('No segments found.');
+
+      // 4. Setup Writer (File System API or Memory)
+      let fileHandle: any = null;
+      let writable: any = null;
+      let memoryBlobs: Blob[] = [];
+      const useFileSystem = 'showSaveFilePicker' in window;
+
+      if (useFileSystem) {
+        try {
+          // @ts-ignore
+          fileHandle = await window.showSaveFilePicker({
+            suggestedName: 'video.ts',
+            types: [{
+              description: 'MPEG Transport Stream',
+              accept: { 'video/mp2t': ['.ts'] },
+            }],
+          });
+          writable = await fileHandle.createWritable();
+        } catch (e) {
+          // User cancelled or not supported, fallback to memory
+          console.warn('File System API cancelled or failed, falling back to memory', e);
+        }
+      }
+
+      // 5. Download Loop
+      for (let i = 0; i < segments.length; i++) {
+        if (signal.aborted) break;
+
+        const progress = Math.round(((i + 1) / segments.length) * 100);
+        this.notify({
+          id: notifId,
+          type: 'loading',
+          message: `Downloading segment ${i + 1}/${segments.length}...`,
+          progress: progress,
+          action: { label: 'Cancel', onClick: () => this.cancelDownload() }
+        });
+
+        const segRes = await this.fetchWithRetry(segments[i], 3, undefined, signal);
+        const blob = await segRes.blob();
+
+        if (writable) {
+          await writable.write(blob);
+        } else {
+          memoryBlobs.push(blob);
+        }
+      }
+
+      if (signal.aborted) {
+        if (writable) await writable.abort();
+        throw new Error('Aborted');
+      }
+
+      if (writable) {
+        await writable.close();
+        this.notify({ id: notifId, type: 'success', message: 'Download complete!', duration: 3000 });
+      } else {
+        // Combine blobs and download
+        this.notify({ id: notifId, type: 'loading', message: 'Stitching video...', progress: 100 });
+        const finalBlob = new Blob(memoryBlobs, { type: 'video/mp2t' });
+        const url = window.URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'video.ts';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        this.notify({ id: notifId, type: 'success', message: 'Saved!', duration: 3000 });
+      }
+
+    } catch (e: any) {
+      if (signal.aborted) {
+        this.removeNotification(notifId);
+      } else {
+        this.notify({ id: notifId, type: 'error', message: `Download failed: ${e.message}`, duration: 4000 });
       }
     } finally {
       this.currentDownloadController = null;

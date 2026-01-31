@@ -64,8 +64,7 @@ const SOURCES: VideoSource[] = [
     tracks: [
       { kind: 'subtitles', label: 'English', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_en.vtt', srcLang: 'en', default: true },
       { kind: 'subtitles', label: 'Spanish', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_es.vtt', srcLang: 'es' },
-      { kind: 'subtitles', label: 'French', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_fr.vtt', srcLang: 'fr' },
-      {  kind: 'subtitles',label: 'Eng', src: 'https://cacdn.hakunaymatata.com/subtitle/e1f0ae34a91dd6aa8af6451de5a9d9af.srt?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9jYWNkbi5oYWt1bmF5bWF0YXRhLmNvbS9zdWJ0aXRsZS8qIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzcwNDU5NDA0fX19XX0_&Signature=ArV2BKtF7uWBuywYx1xFHU6ixmvVIQhqOTRcsXYORI0kkHiKFutSVC2xhB21XJqJCINrU3YkTcOWIgsJ5UMTnZRyC~KMposocQv59veXW0OmflQk5rRLw-DsX6ZKi2MV9DOq9NTY4bKObPAhjUg~k2bYk4Wrt5DjcH11Yofy1o7SLAzPm60U6arIsyzSlVAa~eqz6KRY~tLUg3iXBObzGiuEjTSZKj3ioHE6FHn3ram2Pwu6GwJ9V4IZkfTkOAM5dAzBXlT9fpHBsEgtUVmUlKKSZPIO0g36ElyoBXeGfJ~dL86uDwxmGoYn1KxXt8MGSwxHmIfZqx5gUS8iRYiMDQ__&Key-Pair-Id=KMHN1LQ1HEUPL', srcLang: 'en' }
+      { kind: 'subtitles', label: 'French', src: 'https://bitdash-a.akamaihd.net/content/sintel/subtitles/subtitles_fr.vtt', srcLang: 'fr' }
     ]
   },
   {
