@@ -1,8 +1,19 @@
-
-import React from 'react';
+import React from "react";
 
 // Base SVG Wrapper matching Lucide defaults
-const Icon = ({ className, children, fill = "none", strokeWidth = 2, viewBox = "0 0 24 24" }: { className?: string, children: React.ReactNode, fill?: string, strokeWidth?: number, viewBox?: string }) => (
+const Icon = ({
+  className,
+  children,
+  fill = "none",
+  strokeWidth = 2,
+  viewBox = "0 0 24 24",
+}: {
+  className?: string;
+  children: React.ReactNode;
+  fill?: string;
+  strokeWidth?: number;
+  viewBox?: string;
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox={viewBox}
@@ -426,6 +437,56 @@ export const AlertCircleIcon = ({ className }: { className?: string }) => (
   </Icon>
 );
 
+export const QualityIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <path d="M2 20h.01" />
+    <path d="M7 20v-4" />
+    <path d="M12 20v-8" />
+    <path d="M17 20V8" />
+    <path d="M22 20V4" />
+  </Icon>
+);
+
+export const VideoFlipIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <path d="M21 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="M16 2v4" />
+    <path d="M8 2v4" />
+    <path d="M3 12h18" />
+  </Icon>
+);
+
+export const SearchIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" />
+  </Icon>
+);
+
+export const XIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </Icon>
+);
+
+export const FileCheckIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+    <polyline points="14 2 14 8 20 8" />
+    <path d="m9 15 2 2 4-4" />
+  </Icon>
+);
+
+export const FileWarningIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+    <polyline points="14 2 14 8 20 8" />
+    <path d="M12 18h.01" />
+    <path d="M12 12v4" />
+  </Icon>
+);
+
 // Custom Composite Icons (Reusing Base Icons + Text)
 export const Replay10Icon = ({ className }: { className?: string }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
@@ -433,7 +494,9 @@ export const Replay10Icon = ({ className }: { className?: string }) => (
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
     </Icon>
-    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">10</span>
+    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">
+      10
+    </span>
   </div>
 );
 
@@ -443,12 +506,14 @@ export const Forward10Icon = ({ className }: { className?: string }) => (
       <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
       <path d="M21 3v5h-5" />
     </Icon>
-    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">10</span>
+    <span className="absolute inset-0 flex items-center justify-center text-[32%] font-bold select-none mt-[1px]">
+      10
+    </span>
   </div>
 );
 
 export const StrataLogo = ({ className }: { className?: string }) => {
-  const base = import.meta.env?.BASE_URL || '/';
+  const base = import.meta.env?.BASE_URL || "/";
   const src = `${base}logo.png`;
   return <img src={src} alt="StrataPlayer Logo" className={className} />;
 };

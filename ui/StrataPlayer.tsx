@@ -18,7 +18,7 @@ import {
     LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
     CustomizeIcon, CameraIcon, LockIcon, UnlockIcon, WebFullscreenIcon,
     FastForwardIcon, RatioIcon, ExpandIcon, InfoIcon,
-    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon
+    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon, QualityIcon, VideoFlipIcon
 } from './Icons';
 
 declare module 'react' {
@@ -275,10 +275,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     useEffect(() => {
         if (player && autoPlay) {
-            // Note: Autoplay might be blocked by browsers if not muted, but user requested unmuted default.
             player.play().catch(() => {
-                // If autoplay fails (likely due to audio), we could fallback to mute, but keeping strictly as requested.
-                console.warn('Autoplay failed (likely needs user interaction)');
+                // Autoplay blocked handling
+                player.pause(); // Ensure UI state is consistent
+                player.notify({ type: 'warning', message: 'Autoplay blocked by browser. Click play to start.', duration: 5000 });
             });
         }
     }, [player, autoPlay]);
@@ -806,14 +806,14 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     )}
 
                                     {/* Playback Configuration */}
-                                    <MenuItem label="Quality" icon={<LayersIcon className="w-4 h-4" />} value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
+                                    <MenuItem label="Quality" icon={<QualityIcon className="w-4 h-4" />} value={state.currentQuality === -1 ? 'Auto' : `${state.qualityLevels[state.currentQuality]?.height}p`} onClick={() => setActiveMenu('quality')} hasSubmenu />
                                     <MenuItem label="Speed" icon={<GaugeIcon className="w-4 h-4" />} value={`${state.playbackRate}x`} onClick={() => setActiveMenu('speed')} hasSubmenu />
                                     <MenuItem label="Audio" icon={<MusicIcon className="w-4 h-4" />} value={state.audioTracks[state.currentAudioTrack]?.label || 'Default'} onClick={() => setActiveMenu('audio')} hasSubmenu />
 
                                     <MenuDivider />
 
                                     {/* Visual Adjustments */}
-                                    {useFlip && <MenuItem label="Flip" icon={<FlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
+                                    {useFlip && <MenuItem label="Flip" icon={<VideoFlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
                                     {useAspectRatio && <MenuItem label="Aspect Ratio" icon={<CropIcon className="w-4 h-4" />} value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
 
                                     {/* Audio Tools */}
@@ -1193,7 +1193,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                     {poster && !hasPlayed && (
                         <div
-                            className="absolute inset-0 bg-cover bg-center z-[5] pointer-events-none"
+                            className="absolute inset-0 bg-cover bg-center z-[5] pointer-events-none strata-poster"
                             style={{ backgroundImage: `url(${poster})` }}
                         />
                     )}
@@ -1325,10 +1325,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             )}
         </div>
     );
-
-    if (isWebFs && typeof document !== 'undefined') {
+    
+    if (state.isWebFullscreen && typeof document !== 'undefined') {
         return createPortal(playerContent, document.body);
     }
-
+    
     return playerContent;
 };

@@ -11,6 +11,10 @@ export interface Notification {
   type: 'info' | 'success' | 'warning' | 'error' | 'loading';
   duration?: number; // ms, if null then persistent
   progress?: number; // 0-100
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 export interface TextTrackConfig {
@@ -19,6 +23,12 @@ export interface TextTrackConfig {
   srcLang?: string;
   default?: boolean;
   kind?: 'subtitles' | 'captions' | 'descriptions' | 'chapters' | 'metadata';
+}
+
+export interface SubtitleTrackState extends TextTrackConfig {
+  index: number;
+  status: 'idle' | 'loading' | 'success' | 'error';
+  isDefault?: boolean;
 }
 
 export interface SubtitleSettings {
@@ -148,7 +158,7 @@ export interface PlayerState {
   isFullscreen: boolean;
   isWebFullscreen: boolean;
   isPip: boolean;
-  subtitleTracks: { label: string; language: string; index: number }[];
+  subtitleTracks: SubtitleTrackState[];
   currentSubtitle: number;
   subtitleOffset: number; // in seconds
   subtitleSettings: SubtitleSettings;
@@ -332,7 +342,11 @@ export class StrataCore {
   private retryTimer: any = null;
   private currentSource: PlayerSource | null = null;
   private currentSrc: string = '';
-  private currentTracks: TextTrackConfig[] = [];
+  // Track configs from setSources are stored here to lazy load
+  private trackConfigs: TextTrackConfig[] = [];
+
+  // Download Control
+  private currentDownloadController: AbortController | null = null;
 
   // Cast
   private castInitialized = false;
@@ -565,9 +579,6 @@ export class StrataCore {
 
     // Global fullscreen listener to catch Esc key or browser button
     document.addEventListener('fullscreenchange', this.boundFullscreenChange);
-
-    this.video.textTracks.addEventListener('addtrack', this.updateSubtitles.bind(this));
-    this.video.textTracks.addEventListener('removetrack', this.updateSubtitles.bind(this));
   }
 
   private updateSourceStatus(status: 'success' | 'error') {
@@ -683,7 +694,7 @@ export class StrataCore {
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = setTimeout(() => {
         if (this.currentSource) {
-          this.load(this.currentSource, this.currentTracks, true); // True = isRetry
+          this.load(this.currentSource, this.trackConfigs, true); // True = isRetry
 
           const time = this.store.get().currentTime;
           if (time > 0) {
@@ -717,46 +728,55 @@ export class StrataCore {
     this.store.setState({ buffered });
   }
 
-  private updateSubtitles() {
-    setTimeout(() => {
-      const tracks = Array.from(this.video.textTracks)
-        .filter(t => t.kind === 'subtitles' || t.kind === 'captions')
-        .map((track, index) => ({
-          label: track.label || track.language || `Track ${index + 1}`,
-          language: track.language,
-          index: index
-        }));
-      this.store.setState({ subtitleTracks: tracks });
-
-      // Restore persisted selection if applicable and tracks exist
-      const state = this.store.get();
-      if (state.currentSubtitle !== -1 && tracks.length > 0 && state.currentSubtitle < tracks.length) {
-        this.setSubtitle(state.currentSubtitle);
+  private updateSubtitleTrackState(index: number, partial: Partial<SubtitleTrackState>) {
+    this.store.setState((prev) => {
+      const newTracks = [...prev.subtitleTracks];
+      if (newTracks[index]) {
+        newTracks[index] = { ...newTracks[index], ...partial };
       }
-    }, 50);
+      return { subtitleTracks: newTracks };
+    });
   }
 
   // --- Utility ---
 
-  async fetchWithRetry(url: string, retries = 3, timeout?: number): Promise<Response> {
+  async fetchWithRetry(url: string, retries = 3, timeout?: number, signal?: AbortSignal): Promise<Response> {
     const effectiveTimeout = timeout ?? this.config.fetchTimeout ?? 30000;
     for (let i = 0; i < retries; i++) {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), effectiveTimeout);
+      // Create local controller only if external signal not provided
+      const localController = signal ? null : new AbortController();
+      const fetchSignal = signal || localController?.signal;
+
+      const id = setTimeout(() => localController?.abort(), effectiveTimeout);
       try {
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, { signal: fetchSignal });
         clearTimeout(id);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res;
       } catch (e: any) {
         clearTimeout(id);
+        if (signal?.aborted) throw new Error('Aborted');
         if (i === retries - 1) throw e;
         // If it's an abort error, warn
-        if (e.name === 'AbortError') console.warn(`Fetch timeout (${effectiveTimeout}ms) for ${url}`);
+        if (e.name === 'AbortError') {
+          if (signal?.aborted) throw e; // Pass up external aborts
+          console.warn(`Fetch timeout (${effectiveTimeout}ms) for ${url}`);
+        }
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
       }
     }
     throw new Error('Fetch failed');
+  }
+
+  // Helper to ensure subtitle content is VTT
+  private convertToVTT(content: string): string {
+    // Check for SRT style timestamps or lack of header
+    if (!content.trim().startsWith('WEBVTT')) {
+      // Replace SRT comma timestamps (00:00:20,000) with VTT dot timestamps (00:00:20.000)
+      let vtt = content.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+      return 'WEBVTT\n\n' + vtt;
+    }
+    return content;
   }
 
   // --- Core Methods ---
@@ -803,7 +823,7 @@ export class StrataCore {
 
   setSources(sources: PlayerSource[], tracks: TextTrackConfig[] = []) {
     this.store.setState({ sources });
-    this.currentTracks = tracks;
+    this.trackConfigs = tracks;
     if (sources.length > 0) {
       this.load(sources[0], tracks);
     }
@@ -815,7 +835,7 @@ export class StrataCore {
       const time = this.video.currentTime;
       const wasPlaying = !this.video.paused;
 
-      this.load(sources[index], this.currentTracks);
+      this.load(sources[index], this.trackConfigs);
 
       const onCanPlay = () => {
         this.video.currentTime = time;
@@ -840,18 +860,28 @@ export class StrataCore {
 
     this.currentSrc = srcObj.url;
     this.currentSource = srcObj;
-    this.currentTracks = tracks;
+    this.trackConfigs = tracks;
 
     // Update index state if part of playlist
     const allSources = this.store.get().sources;
     const index = allSources.findIndex(s => s.url === srcObj.url);
+
+    // Prepare initial subtitle tracks state based on configuration
+    const initialSubtitleTracks: SubtitleTrackState[] = tracks.map((t, i) => ({
+      ...t,
+      index: i,
+      status: 'idle',
+      isDefault: !!t.default
+    }));
+
     this.store.setState({
       isBuffering: true,
       qualityLevels: [],
       currentQuality: -1, // Reset quality to Auto on source switch
       audioTracks: [],
       currentAudioTrack: -1, // Reset audio track
-      // subtitleTracks and currentSubtitle are purposely preserved
+      subtitleTracks: initialSubtitleTracks,
+      currentSubtitle: -1,
       currentSourceIndex: index
     });
 
@@ -871,19 +901,16 @@ export class StrataCore {
     // Emit load event with source details so plugins can decide to act
     this.events.emit('load', { url: srcObj.url, type });
 
+    // Clear existing tracks from DOM
     const oldTracks = this.video.getElementsByTagName('track');
     while (oldTracks.length > 0) {
       oldTracks[0].remove();
     }
 
-    if (tracks.length > 0) {
-      tracks.forEach(t => {
-        this.fetchWithRetry(t.src).then(() => {
-          this.addTextTrackInternal(t.src, t.label, t.srcLang, t.default);
-        }).catch(e => {
-          this.notify({ type: 'warning', message: `Failed to load subtitle: ${t.label}`, duration: 4000 });
-        });
-      });
+    // Lazy load default subtitle if present
+    const defaultTrackIndex = initialSubtitleTracks.findIndex(t => t.default);
+    if (defaultTrackIndex !== -1) {
+      this.setSubtitle(defaultTrackIndex);
     }
 
     // If it's standard MP4/WebM, set src directly. Plugins handle HLS/Dash/Mpegts/WebTorrent.
@@ -894,7 +921,24 @@ export class StrataCore {
 
   // Wrapper for external subtitle API
   public loadSubtitle(url: string, label: string = 'Subtitle') {
-    this.addTextTrackInternal(url, label, undefined, true);
+    // Add to state list dynamically
+    const newIndex = this.store.get().subtitleTracks.length;
+    const newTrack: SubtitleTrackState = {
+      src: url,
+      label,
+      srcLang: 'user',
+      default: true,
+      kind: 'subtitles',
+      index: newIndex,
+      status: 'idle',
+      isDefault: true
+    };
+
+    this.store.setState(prev => ({
+      subtitleTracks: [...prev.subtitleTracks, newTrack]
+    }));
+
+    this.setSubtitle(newIndex);
   }
 
   public addTextTrack(file: File, label: string) {
@@ -902,24 +946,13 @@ export class StrataCore {
     reader.onload = (e) => {
       if (!e.target?.result) return;
       let content = e.target.result as string;
-      if (file.name.toLowerCase().endsWith('.srt') || !content.trim().startsWith('WEBVTT')) {
-        content = content.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-        if (!content.trim().startsWith('WEBVTT')) {
-          content = 'WEBVTT\n\n' + content;
-        }
-      }
+      content = this.convertToVTT(content);
+
       const blob = new Blob([content], { type: 'text/vtt' });
       const url = URL.createObjectURL(blob);
-      this.addTextTrackInternal(url, label, 'user', true);
 
-      setTimeout(() => {
-        const tracks = this.store.get().subtitleTracks;
-        const newTrackIndex = tracks.findIndex(t => t.label === label);
-        if (newTrackIndex !== -1) {
-          this.setSubtitle(newTrackIndex);
-          this.notify({ type: 'success', message: 'Subtitle uploaded', duration: 3000 });
-        }
-      }, 200);
+      this.loadSubtitle(url, label);
+      this.notify({ type: 'success', message: 'Subtitle uploaded', duration: 3000 });
     };
     reader.onerror = () => {
       this.notify({ type: 'error', message: 'Failed to read file', duration: 3000 });
@@ -935,7 +968,6 @@ export class StrataCore {
     track.srclang = lang;
     if (isDefault) track.default = true;
     this.video.appendChild(track);
-    this.updateSubtitles();
   }
 
   play() { return this.video.play(); }
@@ -1203,40 +1235,71 @@ export class StrataCore {
       return;
     }
 
-    // Find active track
+    // Find active track in DOM
     const tracks = Array.from(this.video.textTracks).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
-    const track = tracks[state.currentSubtitle];
+    // We need to match the DOM track with our state index.
+    // Since we only add tracks that are "loaded", the index in DOM matches the filter of loaded tracks in our state.
+    // However, simplest is to look for the track with mode='showing'.
+    const activeTrack = tracks.find(t => t.mode === 'showing' || t.mode === 'hidden'); // Hidden is used for custom render
 
-    if (track && track.activeCues) {
-      const cues = Array.from(track.activeCues).map((c: any) => c.text);
+    if (activeTrack && activeTrack.activeCues) {
+      const cues = Array.from(activeTrack.activeCues).map((c: any) => c.text);
       this.store.setState({ activeCues: cues });
     } else {
       this.store.setState({ activeCues: [] });
     }
   }
 
-  setSubtitle(index: number) {
-    // Remove listeners from old tracks
+  async setSubtitle(index: number) {
+    const state = this.store.get();
+    const targetTrack = state.subtitleTracks[index];
+
+    // 1. Disable all current tracks
     Array.from(this.video.textTracks).forEach(t => {
       t.removeEventListener('cuechange', this.boundCueChange);
-      t.mode = 'hidden'; // Reset to hidden before applying new state
+      t.mode = 'disabled'; // Use disabled to stop fetching/processing events for unused tracks
     });
-
     this.store.setState({ currentSubtitle: index, subtitleOffset: 0, activeCues: [] });
 
-    if (index !== -1) {
-      // Find active track in the filtered list logic
-      const tracks = Array.from(this.video.textTracks).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
-      const track = tracks[index];
-      if (track) {
-        const settings = this.store.get().subtitleSettings;
-        // If using Native, mode = showing. If custom, mode = hidden (but not disabled, so cues update)
-        track.mode = settings.useNative ? 'showing' : 'hidden';
-        track.addEventListener('cuechange', this.boundCueChange);
+    if (index === -1) return;
+    if (!targetTrack) return;
 
-        // Initial trigger
-        this.handleCueChange();
+    // 2. Check if loaded. If not, fetch it.
+    if (targetTrack.status === 'idle' || targetTrack.status === 'error') {
+      this.updateSubtitleTrackState(index, { status: 'loading' });
+
+      try {
+        // Fetch blob to ensure valid response and handle CORS if needed
+        const response = await this.fetchWithRetry(targetTrack.src);
+        let text = await response.text();
+
+        // Auto-convert SRT to VTT if needed
+        text = this.convertToVTT(text);
+
+        // Convert to Blob for safe addition (fixes some CORS issues with native track element)
+        const blob = new Blob([text], { type: 'text/vtt' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Add to DOM
+        this.addTextTrackInternal(blobUrl, targetTrack.label, targetTrack.srcLang, targetTrack.isDefault || false);
+        this.updateSubtitleTrackState(index, { status: 'success' });
+      } catch (e) {
+        this.updateSubtitleTrackState(index, { status: 'error' });
+        console.error("Failed to load subtitle", e);
+        return;
       }
+    }
+
+    // 3. Enable the track in DOM
+    // We find the track by label/srclang since DOM index might vary
+    const domTracks = Array.from(this.video.textTracks);
+    const track = domTracks.find(t => t.label === targetTrack.label && t.language === targetTrack.srcLang);
+
+    if (track) {
+      const settings = this.store.get().subtitleSettings;
+      track.mode = settings.useNative ? 'showing' : 'hidden';
+      track.addEventListener('cuechange', this.boundCueChange);
+      this.handleCueChange();
     }
   }
 
@@ -1247,13 +1310,24 @@ export class StrataCore {
 
     // If switching native/custom, re-apply track mode
     if (settings.useNative !== undefined) {
-      this.setSubtitle(this.store.get().currentSubtitle);
+      // Re-trigger setSubtitle to apply correct mode (hidden vs showing)
+      // We don't need to re-fetch since status is already success
+      const idx = this.store.get().currentSubtitle;
+      if (idx !== -1) {
+        // Find active track and update mode directly
+        const state = this.store.get();
+        const target = state.subtitleTracks[idx];
+        const track = Array.from(this.video.textTracks).find(t => t.label === target.label && t.language === target.srcLang);
+        if (track) {
+          track.mode = settings.useNative ? 'showing' : 'hidden';
+        }
+      }
     }
   }
 
   resetSubtitleSettings() {
     this.store.setState({ subtitleSettings: DEFAULT_SUBTITLE_SETTINGS });
-    this.setSubtitle(this.store.get().currentSubtitle); // Re-apply modes
+    this.updateSubtitleSettings({ useNative: false }); // Trigger mode update
   }
 
   setSubtitleOffset(offset: number) {
@@ -1276,16 +1350,42 @@ export class StrataCore {
     this.notify({ type: 'info', message: `Subtitle Offset: ${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`, duration: 1500 });
   }
 
-  async download() { /* same as before */
+  cancelDownload() {
+    if (this.currentDownloadController) {
+      this.currentDownloadController.abort();
+      this.currentDownloadController = null;
+      this.notify({ type: 'info', message: 'Download cancelled', duration: 2000 });
+    }
+  }
+
+  async download() {
     if (!this.video.src) return;
     const src = this.video.src;
     if (src.includes('blob:') || src.includes('.m3u8')) {
       this.notify({ type: 'warning', message: 'Stream download not supported in browser.', duration: 4000 });
       return;
     }
-    const notifId = this.notify({ type: 'loading', message: 'Preparing download...', progress: 0 });
+
+    // Abort previous download if active
+    if (this.currentDownloadController) {
+      this.currentDownloadController.abort();
+    }
+
+    this.currentDownloadController = new AbortController();
+    const signal = this.currentDownloadController.signal;
+
+    const notifId = this.notify({
+      type: 'loading',
+      message: 'Preparing download...',
+      progress: 0,
+      action: {
+        label: 'Cancel',
+        onClick: () => this.cancelDownload()
+      }
+    });
+
     try {
-      const response = await this.fetchWithRetry(src);
+      const response = await this.fetchWithRetry(src, 3, undefined, signal);
       if (!response.body) throw new Error('No body');
       const reader = response.body.getReader();
       const contentLength = response.headers.get('Content-Length');
@@ -1299,7 +1399,16 @@ export class StrataCore {
         loaded += value.length;
         if (total) {
           const percent = Math.round((loaded / total) * 100);
-          this.notify({ id: notifId, type: 'loading', message: `Downloading... ${percent}%`, progress: percent });
+          this.notify({
+            id: notifId,
+            type: 'loading',
+            message: `Downloading... ${percent}%`,
+            progress: percent,
+            action: {
+              label: 'Cancel',
+              onClick: () => this.cancelDownload()
+            }
+          });
         }
       }
       const blob = new Blob(chunks);
@@ -1314,15 +1423,31 @@ export class StrataCore {
       document.body.removeChild(a);
       this.notify({ id: notifId, type: 'success', message: 'Saved!', duration: 3000 });
     } catch (e: any) {
-      this.notify({ id: notifId, type: 'error', message: 'Download failed.', duration: 4000 });
-      window.open(src, '_blank');
+      if (signal.aborted) {
+        this.removeNotification(notifId); // Handled by cancelDownload notify usually, but ensure cleanup
+      } else {
+        this.notify({ id: notifId, type: 'error', message: 'Download failed.', duration: 4000 });
+        // Fallback
+        window.open(src, '_blank');
+      }
+    } finally {
+      this.currentDownloadController = null;
     }
   }
 
   notify(n: Omit<Notification, 'id'> & { id?: string }) {
     const id = n.id || Math.random().toString(36).substr(2, 9);
     const newNotification: Notification = { ...n, id };
-    this.store.setState({ notifications: [newNotification] });
+
+    // If update, replace. If new, append.
+    this.store.setState(prev => {
+      const exists = prev.notifications.find(existing => existing.id === id);
+      if (exists) {
+        return { notifications: prev.notifications.map(existing => existing.id === id ? newNotification : existing) };
+      }
+      return { notifications: [...prev.notifications, newNotification] };
+    });
+
     if (n.duration) setTimeout(() => this.removeNotification(id), n.duration);
     return id;
   }
@@ -1344,6 +1469,9 @@ export class StrataCore {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+    if (this.currentDownloadController) {
+      this.currentDownloadController.abort();
     }
 
     // Clean up web fullscreen scroll lock if active
