@@ -146,13 +146,33 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     // Helper to close all menus
     const closeAllMenus = useCallback(() => {
-        setSettingsOpen(false);
-        setSubtitleMenuOpen(false);
-        setActiveControlId(null);
-        setContextMenu(prev => ({ ...prev, visible: false }));
-        // We generally don't reset activeMenu so if user re-opens settings they are where they left off, 
-        // or you can reset it: setActiveMenu('main');
-    }, []);
+        if (settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible) {
+            setSettingsOpen(false);
+            setSubtitleMenuOpen(false);
+            setActiveControlId(null);
+            setContextMenu(prev => ({ ...prev, visible: false }));
+        }
+    }, [settingsOpen, subtitleMenuOpen, activeControlId, contextMenu.visible]);
+
+    // Global listener to close popovers on outside click (e.g. layers, empty control bar space)
+    useEffect(() => {
+        const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
+            // Since Menu components stop propagation, any click reaching document is "outside"
+            if (settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible) {
+                closeAllMenus();
+            }
+        };
+
+        if (settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible) {
+            document.addEventListener('click', handleGlobalClick);
+            document.addEventListener('touchstart', handleGlobalClick);
+        }
+        
+        return () => {
+            document.removeEventListener('click', handleGlobalClick);
+            document.removeEventListener('touchstart', handleGlobalClick);
+        };
+    }, [settingsOpen, subtitleMenuOpen, activeControlId, contextMenu.visible, closeAllMenus]);
 
     // Seek & Scrubbing State
     const [isScrubbing, setIsScrubbing] = useState(false);
@@ -514,7 +534,8 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             return;
         }
 
-        // Close menus on outside click. If menus were open, stop here (don't toggle play/seek).
+        // Priority 1: Close menus on outside click.
+        // If a menu is open, clicking the container should ONLY close the menu, NOT toggle play/pause.
         if (settingsOpen || subtitleMenuOpen || activeControlId || contextMenu.visible) {
             closeAllMenus();
             return;
@@ -533,6 +554,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         // If locked, do nothing else (prevent play/pause, seek, double tap)
         if (state.isLocked) return;
 
+        // Priority 2: Toggle Play/Pause or handle gestures
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const width = rect.width;
@@ -541,10 +563,12 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (clickTimeoutRef.current) {
             clearTimeout(clickTimeoutRef.current);
             clickTimeoutRef.current = null;
+            // Double Click Logic
             if (x < width * 0.35) { triggerSkip('rewind'); setSeekAnimation({ type: 'rewind', id: now }); }
             else if (x > width * 0.65) { triggerSkip('forward'); setSeekAnimation({ type: 'forward', id: now }); }
             else player.toggleFullscreen();
         } else {
+            // Single Click Logic (Delayed to wait for potential double click)
             clickTimeoutRef.current = setTimeout(() => {
                 player.togglePlay();
                 clickTimeoutRef.current = null;
@@ -775,7 +799,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         {subtitleTransition.isMounted && (
                             <SubtitleMenu
                                 tracks={state.subtitleTracks} current={state.currentSubtitle} onSelect={(idx: number) => player?.setSubtitle(idx)}
-                                onUpload={(file: File) => player?.addTextTrack(file, file.name)} onClose={() => setSubtitleMenuOpen(false)}
+                                onUpload={(file: File) => player?.addTextTrack(file, file.name)} onClose={closeAllMenus}
                                 settings={state.subtitleSettings} onSettingsChange={(s: Partial<SubtitleSettings>) => player?.updateSubtitleSettings(s)}
                                 onReset={() => player?.resetSubtitleSettings()} offset={state.subtitleOffset} onOffsetChange={(val: number) => player?.setSubtitleOffset(val)}
                                 maxHeight={menuMaxHeight} animationClass={`strata-backdrop ${backdropClass} ${subtitleTransition.isVisible ? 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300' : 'opacity-0 translate-y-2 scale-95 duration-300'}`}
@@ -792,7 +816,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                 return (
                     <div key="settings" className="relative">
                         <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); const wasOpen = settingsOpen; closeAllMenus(); if (!wasOpen) { setSettingsOpen(true); setActiveMenu('main'); } }} className={`strata-control-btn transition-all duration-300 focus:outline-none ${btnClass} ${settingsOpen ? 'rotate-90 text-[var(--accent)] bg-white/10' : 'text-zinc-300 hover:text-white hover:bg-white/10'}`} style={{ borderRadius: 'var(--radius)' }}><SettingsIcon className={iconClass} /></button>
-                        {settingsTransition.isMounted && (<Menu onClose={() => setSettingsOpen(false)} align="right" maxHeight={menuMaxHeight} className={`strata-backdrop ${backdropClass} ${settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300' : 'opacity-0 translate-y-2 scale-95 duration-300'}`}><div className="w-full">
+                        {settingsTransition.isMounted && (<Menu onClose={closeAllMenus} align="right" maxHeight={menuMaxHeight} className={`strata-backdrop ${backdropClass} ${settingsTransition.isVisible ? 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300' : 'opacity-0 translate-y-2 scale-95 duration-300'}`}><div className="w-full">
                             {activeMenu === 'main' && (
                                 <div className="animate-in slide-in-from-left-4 fade-in duration-200">
                                     <div className="px-3 py-2 mb-1 border-b border-white/5 font-bold text-zinc-400 uppercase text-[11px] tracking-wider flex justify-between items-center bg-white/5 sticky top-0 z-10 backdrop-blur-md" style={{ borderRadius: 'var(--radius)' }}><span>Settings</span></div>
@@ -823,7 +847,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                                     {/* Network & Social */}
                                     <MenuItem label="Watch Party" icon={<UsersIcon className="w-4 h-4" />} onClick={() => setActiveMenu('party')} hasSubmenu />
-                                    <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player?.requestCast(); setSettingsOpen(false); }} />
+                                    <MenuItem label="Cast to Device" icon={<CastIcon className="w-4 h-4" />} onClick={() => { player?.requestCast(); closeAllMenus(); }} />
 
                                     {/* Custom User Settings (Nested Support Added Here) */}
                                     {config.settings && config.settings.length > 0 && <MenuDivider />}
@@ -851,7 +875,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                                     } else {
                                                         if (s.click) s.click(s);
                                                         else if (s.onClick) s.onClick(s);
-                                                        setSettingsOpen(false);
+                                                        closeAllMenus();
                                                     }
                                                 }}
                                             />
@@ -888,7 +912,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                                         onClick={() => {
                                                             if (child.onClick) child.onClick(child);
                                                             else if (child.click) child.click(child);
-                                                            setSettingsOpen(false);
+                                                            closeAllMenus();
                                                         }}
                                                     />
                                                 )}
@@ -1188,8 +1212,14 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     <NotificationContainer notifications={state.notifications} />
                     <SubtitleOverlay cues={state.activeCues} settings={state.subtitleSettings} />
 
-                    {/* Main Interaction Layer */}
-                    <div className="absolute inset-0 z-0" onClick={handleContainerClick} aria-hidden="true" />
+                    {/* Main Interaction Layer (z-[1]) - Sits ABOVE video (which is appended at z-0/auto) to capture clicks */}
+                    <div 
+                        className="absolute inset-0 z-[1] cursor-pointer" 
+                        onClick={handleContainerClick} 
+                        aria-hidden="true" 
+                        role="button"
+                        tabIndex={-1}
+                    />
 
                     {poster && !hasPlayed && (
                         <div
@@ -1204,7 +1234,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                             x={contextMenu.x}
                             y={contextMenu.y}
                             items={contextMenuItems}
-                            onClose={() => setContextMenu({ ...contextMenu, visible: false })}
+                            onClose={closeAllMenus}
                             containerWidth={playerWidth}
                             containerHeight={playerHeight}
                         />
@@ -1217,7 +1247,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
                     {/* Fast Forward Overlay */}
                     {isFastForwarding && (
-                        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 z-40 animate-in fade-in zoom-in duration-200">
+                        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 z-40 animate-in fade-in zoom-in duration-200 pointer-events-none">
                             <FastForwardIcon className="w-4 h-4 text-[var(--accent)] fill-current" />
                             <span className="text-xs font-bold tracking-wider">2x Speed</span>
                         </div>
@@ -1238,7 +1268,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     {seekAnimation && (
                         <div
                             key={seekAnimation.id}
-                            className={`absolute top-0 bottom-0 flex items-center justify-center w-[35%] z-20 bg-white/5 backdrop-blur-[1px] animate-out fade-out duration-500 fill-mode-forwards ${seekAnimation.type === 'rewind' ? 'left-0 rounded-r-[4rem]' : 'right-0 rounded-l-[4rem]'}`}
+                            className={`absolute top-0 bottom-0 flex items-center justify-center w-[35%] z-20 bg-white/5 backdrop-blur-[1px] animate-out fade-out duration-500 fill-mode-forwards pointer-events-none ${seekAnimation.type === 'rewind' ? 'left-0 rounded-r-[4rem]' : 'right-0 rounded-l-[4rem]'}`}
                             onAnimationEnd={() => setSeekAnimation(null)}
                         >
                             <div className="flex flex-col items-center text-white drop-shadow-lg">
