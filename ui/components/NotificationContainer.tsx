@@ -43,7 +43,8 @@ export const NotificationContainer = ({
                         {n.progress}%
                       </span>
                     </div>
-                    <p className="text-[10px] text-zinc-400 truncate mb-2 leading-tight">
+                    {/* Removed truncate, added whitespace-pre-wrap to support newlines for ETA */}
+                    <p className="text-[10px] text-zinc-400 mb-2 leading-tight whitespace-pre-wrap">
                       {n.message.replace(/Downloading\.\.\. \d+%/, "").trim() ||
                         "Processing..."}
                     </p>
@@ -87,7 +88,7 @@ export const NotificationContainer = ({
                 )}
 
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-xs font-medium leading-snug break-words text-zinc-200">
+                  <span className="text-xs font-medium leading-snug break-words text-zinc-200 whitespace-pre-wrap">
                     {n.message}
                   </span>
                   {n.action && (

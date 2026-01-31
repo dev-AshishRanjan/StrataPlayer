@@ -687,7 +687,8 @@ export class StrataCore {
       this.notify({
         id: 'retry',
         type: 'loading',
-        message: `Error: ${message}. Retrying (${this.retryCount}/${this.maxRetries})...`,
+        // Cleaned up formatting with newline
+        message: `Error: ${message}.\nRetrying (${this.retryCount}/${this.maxRetries})`,
       });
 
       console.warn(`[StrataPlayer] Error: ${message}. Retrying in ${delay}ms...`);
@@ -781,6 +782,24 @@ export class StrataCore {
       return 'WEBVTT\n\n' + vtt;
     }
     return text;
+  }
+
+  // Enhanced Format Duration: Days, Hours, Minutes, Seconds
+  private formatDuration(ms: number): string {
+    if (!isFinite(ms) || ms <= 0) return '';
+    const totalSeconds = Math.floor(ms / 1000);
+    const d = Math.floor(totalSeconds / (3600 * 24));
+    const h = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
+
+    return parts.join(' ');
   }
 
   // --- Core Methods ---
@@ -1299,11 +1318,11 @@ export class StrataCore {
     // We find the track by label/srclang since DOM index might vary
     // If multiple tracks match, we try to use the one that is currently disabled (not active) or just the last one added
     const domTracks = Array.from(this.video.textTracks);
-    
+
     // Robust finding: prefer matching label AND lang, fallback to label only
     let track = domTracks.find(t => t.label === targetTrack.label && t.language === targetTrack.srcLang);
     if (!track) {
-        track = domTracks.find(t => t.label === targetTrack.label);
+      track = domTracks.find(t => t.label === targetTrack.label);
     }
 
     if (track) {
@@ -1396,7 +1415,7 @@ export class StrataCore {
 
     const notifId = this.notify({
       type: 'loading',
-      message: 'Preparing download...',
+      message: 'Preparing download', // Removed ...
       progress: 0,
       action: {
         label: 'Cancel',
@@ -1412,17 +1431,57 @@ export class StrataCore {
       const total = contentLength ? parseInt(contentLength, 10) : 0;
       let loaded = 0;
       const chunks = [];
+      const startTime = Date.now();
+
+      // Sliding window for smoothing speed: Store [timestamp, totalLoaded]
+      const progressSamples: { time: number, loaded: number }[] = [];
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         loaded += value.length;
         if (total) {
+          const now = Date.now();
           const percent = Math.round((loaded / total) * 100);
+
+          // Add sample
+          progressSamples.push({ time: now, loaded });
+
+          // Remove samples older than 5 seconds
+          while (progressSamples.length > 0 && now - progressSamples[0].time > 5000) {
+            progressSamples.shift();
+          }
+
+          let etaSuffix = '';
+
+          // Calculate speed based on sliding window
+          let rate = 0; // bytes per ms
+
+          if (progressSamples.length > 1) {
+            const oldest = progressSamples[0];
+            const newest = progressSamples[progressSamples.length - 1];
+            const timeDiff = newest.time - oldest.time;
+            const bytesDiff = newest.loaded - oldest.loaded;
+            if (timeDiff > 0) rate = bytesDiff / timeDiff;
+          } else {
+            // Fallback to overall average if not enough samples
+            const elapsed = now - startTime;
+            if (elapsed > 0) rate = loaded / elapsed;
+          }
+
+          if (rate > 0) {
+            const remaining = total - loaded;
+            const etaMs = remaining / rate;
+            // Format with newline for visibility
+            etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
+          }
+
           this.notify({
             id: notifId,
             type: 'loading',
-            message: `Downloading... ${percent}%`,
+            // Cleaned string
+            message: `${etaSuffix}`,
             progress: percent,
             action: {
               label: 'Cancel',
@@ -1462,7 +1521,7 @@ export class StrataCore {
 
     const notifId = this.notify({
       type: 'loading',
-      message: 'Analyzing HLS stream...',
+      message: 'Analyzing HLS stream', // Removed ...
       progress: 0,
       action: { label: 'Cancel', onClick: () => this.cancelDownload() }
     });
@@ -1475,7 +1534,7 @@ export class StrataCore {
 
       // 2. Check for Master Playlist
       if (content.includes('#EXT-X-STREAM-INF')) {
-        this.notify({ id: notifId, type: 'loading', message: 'Selecting best quality...', progress: 0 });
+        this.notify({ id: notifId, type: 'loading', message: 'Selecting best quality', progress: 0 }); // Removed ...
         // Parse variants
         const lines = content.split('\n');
         let bestBandwidth = 0;
@@ -1550,7 +1609,13 @@ export class StrataCore {
             }],
           });
           writable = await fileHandle.createWritable();
-        } catch (e) {
+        } catch (e: any) {
+          if (e.name === 'AbortError') {
+            this.removeNotification(notifId);
+            this.notify({ type: 'info', message: 'Download cancelled', duration: 2000 });
+            this.currentDownloadController = null;
+            return;
+          }
           // User cancelled or not supported, fallback to memory
           console.warn('File System API cancelled or failed, falling back to memory', e);
         }
@@ -1558,15 +1623,53 @@ export class StrataCore {
 
       // 6. Download Loop
       let isTsContent = false;
+      const startTime = Date.now();
+
+      // Sliding window for segment processing speed
+      const segmentSamples: { time: number, count: number }[] = [];
 
       for (let i = 0; i < segments.length; i++) {
         if (signal.aborted) break;
 
         const progress = Math.round(((i + 1) / segments.length) * 100);
+
+        // Add sample
+        const now = Date.now();
+        segmentSamples.push({ time: now, count: i + 1 });
+
+        // Remove samples older than 5 seconds
+        while (segmentSamples.length > 0 && now - segmentSamples[0].time > 5000) {
+          segmentSamples.shift();
+        }
+
+        let etaSuffix = '';
+
+        if (segmentSamples.length > 1) {
+          const oldest = segmentSamples[0];
+          const newest = segmentSamples[segmentSamples.length - 1];
+          const timeDiff = newest.time - oldest.time;
+          const countDiff = newest.count - oldest.count;
+
+          if (timeDiff > 0 && countDiff > 0) {
+            const msPerSegment = timeDiff / countDiff;
+            const remainingSegments = segments.length - (i + 1);
+            const etaMs = remainingSegments * msPerSegment;
+            etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
+          }
+        } else if (i > 0) {
+          // Fallback
+          const elapsed = now - startTime;
+          const avgTime = elapsed / i;
+          const remaining = segments.length - i;
+          const etaMs = remaining * avgTime;
+          etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
+        }
+
         this.notify({
           id: notifId,
           type: 'loading',
-          message: `Downloading segment ${i + 1}/${segments.length}...`,
+          // Cleaned string
+          message: `Downloading segment ${i + 1}/${segments.length}${etaSuffix}`,
           progress: progress,
           action: { label: 'Cancel', onClick: () => this.cancelDownload() }
         });
@@ -1613,7 +1716,7 @@ export class StrataCore {
         this.notify({ id: notifId, type: 'success', message: 'Download complete!', duration: 3000 });
       } else {
         // Combine blobs and download
-        this.notify({ id: notifId, type: 'loading', message: 'Stitching video...', progress: 100 });
+        this.notify({ id: notifId, type: 'loading', message: 'Stitching video', progress: 100 }); // Removed ...
         const finalBlob = new Blob(memoryBlobs, { type: mime });
         const url = window.URL.createObjectURL(finalBlob);
         const a = document.createElement('a');
