@@ -398,7 +398,9 @@ export class StrataCore {
 
     // Bind fullscreen listener once
     this.boundFullscreenChange = () => {
-      const isFs = !!document.fullscreenElement;
+      const doc = document as any;
+      const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+
       this.store.setState({ isFullscreen: isFs });
       this.emit('resize');
       this.emit(isFs ? 'fullscreen' : 'fullscreen_exit');
@@ -599,8 +601,9 @@ export class StrataCore {
       this.emit('pip', false);
     });
 
-    // Global fullscreen listener to catch Esc key or browser button
-    document.addEventListener('fullscreenchange', this.boundFullscreenChange);
+    // Global fullscreen listener with vendor prefixes
+    const fsEvents = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+    fsEvents.forEach(evt => document.addEventListener(evt, this.boundFullscreenChange));
   }
 
   private updateSourceStatus(status: 'success' | 'error') {
@@ -1063,10 +1066,19 @@ export class StrataCore {
   async toggleFullscreen() {
     if (!this.container) return;
 
-    // 1. If currently native fullscreen, exit it.
-    if (document.fullscreenElement) {
-      await document.exitFullscreen().catch(() => { });
-      // Orientation lock handled in event listener
+    const doc = document as any;
+    const el = this.container as any;
+
+    // Check for native fullscreen support with vendor prefixes
+    const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+    // 1. Exit if active
+    if (isFullscreen) {
+      if (doc.exitFullscreen) await doc.exitFullscreen().catch(() => { });
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+      else if (doc.msExitFullscreen) doc.msExitFullscreen();
+      // Orientation unlock handled by event listener
       return;
     }
 
@@ -1076,13 +1088,25 @@ export class StrataCore {
       return;
     }
 
-    // 3. Try to enter native fullscreen.
+    // 3. Try aggressive native fullscreen.
     try {
-      await this.container.requestFullscreen();
-      // Orientation lock handled in boundFullscreenChange
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.mozRequestFullScreen) {
+        el.mozRequestFullScreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      } else if (this.video && (this.video as any).webkitEnterFullscreen) {
+        // iOS Fallback: Use video native fullscreen if container fullscreen is missing
+        (this.video as any).webkitEnterFullscreen();
+      } else {
+        throw new Error("Native fullscreen API not supported");
+      }
     } catch (err) {
-      // 4. Fallback: If native fails (e.g. inside restrictive iframe), force Web Fullscreen.
-      // This ensures the user gets a fullscreen-like experience regardless of browser limitations.
+      // 4. Fallback: Force Web Fullscreen (CSS)
+      // This ensures the user gets a fullscreen-like experience regardless of restrictions or errors.
       console.warn('Native fullscreen failed, falling back to Web Fullscreen', err);
       this.toggleWebFullscreen();
     }
@@ -1092,8 +1116,12 @@ export class StrataCore {
     const isWebFs = this.store.get().isWebFullscreen;
 
     // If native fullscreen is active, exit it first to avoid conflicts
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => { });
+    const doc = document as any;
+    if (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement) {
+      if (doc.exitFullscreen) doc.exitFullscreen().catch(() => { });
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+      else if (doc.msExitFullscreen) doc.msExitFullscreen();
     }
 
     const newState = !isWebFs;
@@ -1838,7 +1866,9 @@ export class StrataCore {
       document.body.style.overflow = '';
     }
 
-    document.removeEventListener('fullscreenchange', this.boundFullscreenChange);
+    const fsEvents = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+    fsEvents.forEach(evt => document.removeEventListener(evt, this.boundFullscreenChange));
+
     this.video.pause();
     this.video.src = '';
     const oldTracks = this.video.getElementsByTagName('track');
