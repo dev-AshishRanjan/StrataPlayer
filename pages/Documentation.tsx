@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { StrataPlayer } from '../ui/StrataPlayer';
 import { HlsPlugin } from '../plugins/HlsPlugin';
@@ -10,7 +10,8 @@ import {
   CheckIcon, CopyIcon, MenuIcon, SettingsIcon,
   ArrowLeftIcon, PlayIcon, InfoIcon, FastForwardIcon,
   CustomizeIcon, WebFullscreenIcon, PaletteIcon, LockIcon,
-  LayersIcon, MenuIcon as HamburgerIcon
+  LayersIcon, MenuIcon as HamburgerIcon, SearchIcon, XIcon,
+  ChevronRightIcon
 } from '../ui/Icons';
 
 // --- Helper Components ---
@@ -78,7 +79,7 @@ const LiveExample = ({
 };
 
 const PropDoc = ({ name, type, defaultValue, description, example }: { name: string, type: string, defaultValue?: string, description: string, example?: string }) => (
-  <div className="mb-10 pb-8 border-b border-white/5 last:border-0">
+  <div id={name} className="mb-10 pb-8 border-b border-white/5 last:border-0 scroll-mt-24">
     <div className="flex items-baseline gap-3 mb-3 flex-wrap">
       <h3 className="text-lg font-bold text-white font-mono bg-white/5 px-2 py-1 rounded">{name}</h3>
       <span className="text-sm font-mono text-[var(--accent)]">{type}</span>
@@ -89,16 +90,20 @@ const PropDoc = ({ name, type, defaultValue, description, example }: { name: str
   </div>
 );
 
-const ApiItem = ({ name, signature, description, example }: { name: string, signature: string, description: string, example: string }) => (
-  <div className="mb-10 pb-8 border-b border-white/5 last:border-0">
-    <h3 className="text-lg font-bold text-white font-mono mb-2">{name}</h3>
-    <div className="text-sm font-mono text-zinc-400 mb-3 bg-black/30 p-2 rounded border border-white/5 inline-block">
-      {signature}
+const ApiItem = ({ name, signature, description, example }: { name: string, signature: string, description: string, example: string }) => {
+  // Sanitize name for ID (e.g. "play()" -> "play", "player.paused" -> "player.paused")
+  const id = name.replace(/[()]/g, '');
+  return (
+    <div id={id} className="mb-10 pb-8 border-b border-white/5 last:border-0 scroll-mt-24">
+      <h3 className="text-lg font-bold text-white font-mono mb-2">{name}</h3>
+      <div className="text-sm font-mono text-zinc-400 mb-3 bg-black/30 p-2 rounded border border-white/5 inline-block">
+        {signature}
+      </div>
+      <p className="text-zinc-300 leading-relaxed mb-4">{description}</p>
+      <CodeBlock code={example} />
     </div>
-    <p className="text-zinc-300 leading-relaxed mb-4">{description}</p>
-    <CodeBlock code={example} />
-  </div>
-);
+  );
+};
 
 const InstanceIntro = () => (
   <div className="mb-12 p-6 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
@@ -109,6 +114,264 @@ const InstanceIntro = () => (
     <CodeBlock title="React Example" code={`import { StrataPlayer } from 'strataplayer';\n\nconst App = () => {\n  return (\n    <StrataPlayer \n      src="..."\n      onGetInstance={(player) => {\n        // You now have access to the player instance\n        console.log('Player version:', player.version);\n        \n        player.on('ready', () => {\n            player.play();\n        });\n      }}\n    />\n  );\n};`} />
   </div>
 );
+
+// --- Search Index & Components ---
+
+interface SearchResult {
+  id: string; // Route ID
+  title: string;
+  category: string;
+  anchor: string;
+}
+
+const SEARCH_INDEX: SearchResult[] = [
+  // General Config
+  { id: 'options-general', title: 'src', category: 'General Options', anchor: 'src' },
+  { id: 'options-general', title: 'sources', category: 'General Options', anchor: 'sources' },
+  { id: 'options-general', title: 'type', category: 'General Options', anchor: 'type' },
+  { id: 'options-general', title: 'poster', category: 'General Options', anchor: 'poster' },
+  { id: 'options-general', title: 'thumbnails', category: 'General Options', anchor: 'thumbnails' },
+  { id: 'options-general', title: 'autoPlay', category: 'General Options', anchor: 'autoPlay' },
+  { id: 'options-general', title: 'loop', category: 'General Options', anchor: 'loop' },
+  { id: 'options-general', title: 'muted', category: 'General Options', anchor: 'muted' },
+  { id: 'options-general', title: 'volume', category: 'General Options', anchor: 'volume' },
+  { id: 'options-general', title: 'audioGain', category: 'General Options', anchor: 'audioGain' },
+  { id: 'options-general', title: 'playbackRate', category: 'General Options', anchor: 'playbackRate' },
+  { id: 'options-general', title: 'playsInline', category: 'General Options', anchor: 'playsInline' },
+  { id: 'options-general', title: 'isLive', category: 'General Options', anchor: 'isLive' },
+  { id: 'options-general', title: 'fetchTimeout', category: 'General Options', anchor: 'fetchTimeout' },
+  { id: 'options-general', title: 'disablePersistence', category: 'General Options', anchor: 'disablePersistence' },
+
+  // UI Config
+  { id: 'options-ui', title: 'theme', category: 'UI Options', anchor: 'theme' },
+  { id: 'options-ui', title: 'themeColor', category: 'UI Options', anchor: 'themeColor' },
+  { id: 'options-ui', title: 'iconSize', category: 'UI Options', anchor: 'iconSize' },
+  { id: 'options-ui', title: 'videoFit', category: 'UI Options', anchor: 'videoFit' },
+  { id: 'options-ui', title: 'brightness', category: 'UI Options', anchor: 'brightness' },
+  { id: 'options-ui', title: 'backdrop', category: 'UI Options', anchor: 'backdrop' },
+  { id: 'options-ui', title: 'highlight', category: 'UI Options', anchor: 'highlight' },
+  // Controls
+  { id: 'options-ui', title: 'hotKey', category: 'Control Toggles', anchor: 'hotKey' },
+  { id: 'options-ui', title: 'screenshot', category: 'Control Toggles', anchor: 'screenshot' },
+  { id: 'options-ui', title: 'pip', category: 'Control Toggles', anchor: 'pip' },
+  { id: 'options-ui', title: 'setting', category: 'Control Toggles', anchor: 'setting' },
+  { id: 'options-ui', title: 'fullscreen', category: 'Control Toggles', anchor: 'fullscreen' },
+  { id: 'options-ui', title: 'fullscreenWeb', category: 'Control Toggles', anchor: 'fullscreenWeb' },
+  { id: 'options-ui', title: 'lock', category: 'Control Toggles', anchor: 'lock' },
+  { id: 'options-ui', title: 'flip', category: 'Control Toggles', anchor: 'flip' },
+  { id: 'options-ui', title: 'aspectRatio', category: 'Control Toggles', anchor: 'aspectRatio' },
+  { id: 'options-ui', title: 'fastForward', category: 'Control Toggles', anchor: 'fastForward' },
+  { id: 'options-ui', title: 'autoOrientation', category: 'Control Toggles', anchor: 'autoOrientation' },
+  { id: 'options-ui', title: 'centerControls', category: 'Control Toggles', anchor: 'centerControls' },
+  { id: 'options-ui', title: 'gestureSeek', category: 'Control Toggles', anchor: 'gestureSeek' },
+
+  // Components
+  { id: 'component-controls', title: 'controls', category: 'Components', anchor: 'controls' },
+  { id: 'component-settings', title: 'settings', category: 'Components', anchor: 'settings' },
+  { id: 'component-contextmenu', title: 'contextmenu', category: 'Components', anchor: 'contextmenu' },
+  { id: 'component-layers', title: 'layers', category: 'Components', anchor: 'layers' },
+
+  // API Methods
+  { id: 'api-methods', title: 'play()', category: 'Methods', anchor: 'play' },
+  { id: 'api-methods', title: 'pause()', category: 'Methods', anchor: 'pause' },
+  { id: 'api-methods', title: 'togglePlay()', category: 'Methods', anchor: 'togglePlay' },
+  { id: 'api-methods', title: 'seek()', category: 'Methods', anchor: 'seek' },
+  { id: 'api-methods', title: 'forward()', category: 'Methods', anchor: 'forward' },
+  { id: 'api-methods', title: 'backward()', category: 'Methods', anchor: 'backward' },
+  { id: 'api-methods', title: 'load()', category: 'Methods', anchor: 'load' },
+  { id: 'api-methods', title: 'setVolume()', category: 'Methods', anchor: 'setVolume' },
+  { id: 'api-methods', title: 'toggleMute()', category: 'Methods', anchor: 'toggleMute' },
+  { id: 'api-methods', title: 'setAudioGain()', category: 'Methods', anchor: 'setAudioGain' },
+  { id: 'api-methods', title: 'setQuality()', category: 'Methods', anchor: 'setQuality' },
+  { id: 'api-methods', title: 'setAudioTrack()', category: 'Methods', anchor: 'setAudioTrack' },
+  { id: 'api-methods', title: 'setSubtitle()', category: 'Methods', anchor: 'setSubtitle' },
+  { id: 'api-methods', title: 'addTextTrack()', category: 'Methods', anchor: 'addTextTrack' },
+  { id: 'api-methods', title: 'loadSubtitle()', category: 'Methods', anchor: 'loadSubtitle' },
+  { id: 'api-methods', title: 'setSubtitleOffset()', category: 'Methods', anchor: 'setSubtitleOffset' },
+  { id: 'api-methods', title: 'toggleFullscreen()', category: 'Methods', anchor: 'toggleFullscreen' },
+  { id: 'api-methods', title: 'togglePip()', category: 'Methods', anchor: 'togglePip' },
+  { id: 'api-methods', title: 'screenshot()', category: 'Methods', anchor: 'screenshot' },
+  { id: 'api-methods', title: 'toggleLock()', category: 'Methods', anchor: 'toggleLock' },
+  { id: 'api-methods', title: 'setFlip()', category: 'Methods', anchor: 'setFlip' },
+  { id: 'api-methods', title: 'setAspectRatio()', category: 'Methods', anchor: 'setAspectRatio' },
+  { id: 'api-methods', title: 'setAppearance()', category: 'Methods', anchor: 'setAppearance' },
+  { id: 'api-methods', title: 'notify()', category: 'Methods', anchor: 'notify' },
+  { id: 'api-methods', title: 'requestCast()', category: 'Methods', anchor: 'requestCast' },
+  { id: 'api-methods', title: 'destroy()', category: 'Methods', anchor: 'destroy' },
+
+  // API Properties
+  { id: 'api-properties', title: 'player.playing', category: 'Properties', anchor: 'player.playing' },
+  { id: 'api-properties', title: 'player.paused', category: 'Properties', anchor: 'player.paused' },
+  { id: 'api-properties', title: 'player.currentTime', category: 'Properties', anchor: 'player.currentTime' },
+  { id: 'api-properties', title: 'player.duration', category: 'Properties', anchor: 'player.duration' },
+  { id: 'api-properties', title: 'player.volume', category: 'Properties', anchor: 'player.volume' },
+  { id: 'api-properties', title: 'player.muted', category: 'Properties', anchor: 'player.muted' },
+  { id: 'api-properties', title: 'player.playbackRate', category: 'Properties', anchor: 'player.playbackRate' },
+  { id: 'api-properties', title: 'player.loop', category: 'Properties', anchor: 'player.loop' },
+  { id: 'api-properties', title: 'isBuffering', category: 'State', anchor: 'isBuffering' },
+  { id: 'api-properties', title: 'isLive', category: 'State', anchor: 'isLive' },
+  { id: 'api-properties', title: 'qualityLevels', category: 'State', anchor: 'qualityLevels' },
+  { id: 'api-properties', title: 'audioTracks', category: 'State', anchor: 'audioTracks' },
+  { id: 'api-properties', title: 'error', category: 'State', anchor: 'error' },
+
+  // API Events
+  { id: 'api-events', title: 'ready', category: 'Events', anchor: 'ready' },
+  { id: 'api-events', title: 'load', category: 'Events', anchor: 'load' },
+  { id: 'api-events', title: 'destroy', category: 'Events', anchor: 'destroy' },
+  { id: 'api-events', title: 'play', category: 'Events', anchor: 'play' },
+  { id: 'api-events', title: 'pause', category: 'Events', anchor: 'pause' },
+  { id: 'api-events', title: 'ended', category: 'Events', anchor: 'ended' },
+  { id: 'api-events', title: 'timeupdate', category: 'Events', anchor: 'timeupdate' },
+  { id: 'api-events', title: 'error', category: 'Events', anchor: 'error' },
+];
+
+const SearchPalette = ({ isOpen, onClose, onNavigate }: { isOpen: boolean, onClose: () => void, onNavigate: (item: SearchResult) => void }) => {
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Filter items
+  const results = useMemo(() => {
+    if (!query) return [];
+    const lower = query.toLowerCase();
+    return SEARCH_INDEX.filter(item =>
+      item.title.toLowerCase().includes(lower) ||
+      item.category.toLowerCase().includes(lower)
+    ).slice(0, 15); // Limit results
+  }, [query]);
+
+  // Reset active index when results change
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [results]);
+
+  // Focus input on open
+  useEffect(() => {
+    if (isOpen) {
+      setQuery('');
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex(prev => (prev + 1) % results.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex(prev => (prev - 1 + results.length) % results.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (results[activeIndex]) {
+          onNavigate(results[activeIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, results, activeIndex, onNavigate, onClose]);
+
+  // Auto-scroll list to active item
+  useEffect(() => {
+    if (listRef.current) {
+        const activeEl = listRef.current.children[activeIndex] as HTMLElement;
+        if (activeEl) {
+            // Simple scroll into view logic
+            const containerTop = listRef.current.scrollTop;
+            const containerHeight = listRef.current.clientHeight;
+            const elTop = activeEl.offsetTop;
+            const elHeight = activeEl.clientHeight;
+            
+            if (elTop < containerTop) {
+                listRef.current.scrollTop = elTop;
+            } else if (elTop + elHeight > containerTop + containerHeight) {
+                listRef.current.scrollTop = elTop + elHeight - containerHeight;
+            }
+        }
+    }
+  }, [activeIndex]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] px-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="w-full max-w-lg bg-[#0d1117] border border-white/10 rounded-xl shadow-2xl relative z-10 flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 ring-1 ring-white/10">
+        <div className="flex items-center px-4 py-3 border-b border-white/5 gap-3">
+          <SearchIcon className="w-5 h-5 text-zinc-500" />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search docs..."
+            className="flex-1 bg-transparent text-white placeholder:text-zinc-600 focus:outline-none text-sm h-6"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-zinc-500 bg-white/5 rounded border border-white/5">ESC</kbd>
+            <button onClick={onClose}><XIcon className="w-5 h-5 text-zinc-500 hover:text-white transition-colors" /></button>
+          </div>
+        </div>
+
+        <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2 space-y-1 hide-scrollbar">
+          {results.length === 0 && query && (
+            <div className="px-4 py-8 text-center text-sm text-zinc-500">
+              No results found for "<span className="text-zinc-300">{query}</span>"
+            </div>
+          )}
+          {results.length === 0 && !query && (
+            <div className="px-4 py-8 text-center text-sm text-zinc-500">
+              Type to search documentation...
+            </div>
+          )}
+          {results.map((item, idx) => (
+            <button
+              key={`${item.id}-${item.anchor}`}
+              onClick={() => onNavigate(item)}
+              className={`w-full flex items-center justify-between px-3 py-3 rounded-lg text-left transition-colors group ${idx === activeIndex ? 'bg-indigo-600 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
+            >
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className={`p-1.5 rounded-md shrink-0 ${idx === activeIndex ? 'bg-white/20' : 'bg-white/5 group-hover:bg-white/10'}`}>
+                    <ChevronRightIcon className={`w-3.5 h-3.5 ${idx === activeIndex ? 'text-white' : 'text-zinc-500'}`} />
+                </div>
+                <div className="truncate">
+                  <div className={`text-sm font-medium truncate ${idx === activeIndex ? 'text-white' : 'text-zinc-200'}`}>
+                    {item.title}
+                  </div>
+                  <div className={`text-xs truncate ${idx === activeIndex ? 'text-indigo-200' : 'text-zinc-500'}`}>
+                    {item.category}
+                  </div>
+                </div>
+              </div>
+              <span className={`text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity ${idx === activeIndex ? 'opacity-100 text-indigo-200' : 'text-zinc-600'}`}>
+                Jump to
+              </span>
+            </button>
+          ))}
+        </div>
+        
+        {results.length > 0 && (
+            <div className="px-4 py-2 bg-white/5 border-t border-white/5 text-[10px] text-zinc-500 flex justify-end gap-3">
+                <span><kbd className="font-mono bg-black/30 px-1 rounded">↑↓</kbd> navigate</span>
+                <span><kbd className="font-mono bg-black/30 px-1 rounded">↵</kbd> select</span>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // --- Pages ---
 
@@ -1560,6 +1823,7 @@ const NAVIGATION = [
 export const Documentation = () => {
   const [match, params] = useRoute<{ section: string }>('/docs/:section');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [, setLocation] = useLocation();
 
   // Default to introduction if no section
@@ -1573,16 +1837,53 @@ export const Documentation = () => {
     return IntroPage;
   }, [activeId]);
 
-  const handleNav = (id: string) => {
+  const handleNav = (id: string, anchor?: string) => {
     setLocation(`/docs/${id}`);
+    setSearchOpen(false);
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    if (anchor) {
+        // Allow time for route transition/render
+        setTimeout(() => {
+            const el = document.getElementById(anchor);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+    } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-64px)] max-w-7xl mx-auto relative">
+      <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={(item) => handleNav(item.id, item.anchor)} />
+
       {/* Sidebar Desktop */}
       <aside className="hidden md:block w-64 shrink-0 border-r border-white/10 bg-zinc-950 sticky top-16 h-[calc(100vh-64px)] overflow-y-auto hide-scrollbar z-30">
+        <div className="p-4 sticky top-0 bg-zinc-950 z-10 border-b border-white/5">
+            <button 
+                onClick={() => setSearchOpen(true)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+                <span className="flex items-center gap-2">
+                    <SearchIcon className="w-4 h-4" />
+                    Search
+                </span>
+                <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-black/20 rounded border border-white/5">⌘K</kbd>
+            </button>
+        </div>
         <div className="p-6 space-y-8">
           {NAVIGATION.map((cat) => (
             <div key={cat.category}>
@@ -1609,6 +1910,17 @@ export const Documentation = () => {
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-zinc-900/50">
           <span className="font-bold">Documentation</span>
           <button onClick={() => setMobileMenuOpen(false)}><ArrowLeftIcon className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 border-b border-white/5">
+            <button 
+                onClick={() => { setSearchOpen(true); }}
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-400 hover:text-white"
+            >
+                <span className="flex items-center gap-2">
+                    <SearchIcon className="w-4 h-4" />
+                    Search Docs...
+                </span>
+            </button>
         </div>
         <div className="overflow-y-auto flex-1 p-6 space-y-8 hide-scrollbar">
           {NAVIGATION.map((cat) => (
