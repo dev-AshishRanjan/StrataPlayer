@@ -58,6 +58,7 @@ export const DEFAULT_SUBTITLE_SETTINGS: SubtitleSettings = {
 };
 
 export type PlayerTheme = 'default' | 'pixel' | 'game' | 'hacker';
+export type VideoFit = 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
 
 export interface PlayerSource {
   url: string;
@@ -178,8 +179,10 @@ export interface PlayerState {
   // Phase 1 New Features State
   isLocked: boolean;
   flipState: { horizontal: boolean; vertical: boolean };
-  aspectRatio: string; // 'default', '16:9', '4:3'
-  isAutoSized: boolean; // tracks if autoSize (cover) is currently applied
+  aspectRatio: string; // 'default', '16:9', '4:3', etc
+  videoFit: VideoFit;
+  brightness: number; // 1.0 is default (100%)
+  isAutoSized: boolean; // tracks if autoSize (cover) is currently applied (legacy prop, now maps to videoFit=cover)
   isLooping: boolean; // Track loop state reactively
 
   // UI State reflected in Core
@@ -207,7 +210,8 @@ export interface StrataConfig {
   themeColor?: string;
   iconSize?: 'small' | 'medium' | 'large';
   backdrop?: boolean; // Blur effect
-  autoSize?: boolean; // object-fit: cover logic
+  autoSize?: boolean; // object-fit: cover logic (Legacy)
+  brightness?: number; // Initial brightness
 
   // Subtitles
   subtitleSettings?: Partial<SubtitleSettings>;
@@ -280,6 +284,8 @@ export const DEFAULT_STATE: PlayerState = {
   isLocked: false,
   flipState: { horizontal: false, vertical: false },
   aspectRatio: 'default',
+  videoFit: 'contain',
+  brightness: 1,
   isAutoSized: false,
   isLooping: false,
   controlsVisible: true
@@ -301,6 +307,11 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     ...(config.subtitleSettings || {})
   };
 
+  // Determine initial video fit
+  let initialFit: VideoFit = 'contain';
+  if (config.autoSize) initialFit = 'cover';
+  if (saved.videoFit) initialFit = saved.videoFit;
+
   return {
     ...DEFAULT_STATE,
     ...saved, // Load saved first
@@ -315,6 +326,8 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     subtitleSettings: mergedSubtitleSettings,
     // Config overrides state for these visual modes
     isAutoSized: config.autoSize ?? DEFAULT_STATE.isAutoSized,
+    videoFit: initialFit,
+    brightness: config.brightness ?? saved.brightness ?? DEFAULT_STATE.brightness,
     isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive,
     isLooping: config.loop ?? saved.isLooping ?? DEFAULT_STATE.isLooping,
     sourceStatuses: {} // Never persist statuses
@@ -367,6 +380,11 @@ export class StrataCore {
     this.video = videoElement || document.createElement('video');
     this.video.crossOrigin = "anonymous";
 
+    // Aggressive Buffering: 
+    // Setting preload="auto" hints the browser to buffer as much as possible.
+    // While we can't force chunk size on native mp4 without MSE, this is the best native setting.
+    this.video.preload = "auto";
+
     // Init Config Props to Video
     if (config.playsInline !== false) this.video.playsInline = true;
 
@@ -407,13 +425,15 @@ export class StrataCore {
     this.video.playbackRate = initialState.playbackRate;
     this.video.loop = initialState.isLooping; // Apply loop state
 
+    // Apply brightness
+    this.video.style.filter = `brightness(${initialState.brightness})`;
+
     if (initialState.audioGain > 1) {
       this.audioEngine.setGain(initialState.audioGain);
     }
-    // Apply AutoSize
-    if (initialState.isAutoSized) {
-      this.video.style.objectFit = 'cover';
-    }
+
+    // Apply Video Fit (replaces simple object-fit)
+    this.video.style.objectFit = initialState.videoFit;
 
     this.initVideoListeners();
     this.initMediaSession();
@@ -431,7 +451,9 @@ export class StrataCore {
           themeColor: state.themeColor,
           theme: state.theme,
           isLive: state.isLive,
-          isLooping: state.isLooping
+          isLooping: state.isLooping,
+          brightness: state.brightness,
+          videoFit: state.videoFit,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       });
@@ -634,8 +656,6 @@ export class StrataCore {
     }
 
     // 2. Fallback to relative logo path.
-    // This avoids using import.meta.env.BASE_URL which crashes in some environments.
-    // The browser resolves this relative to the current document's base URL.
     artwork.push({ src: 'logo.png', sizes: '512x512', type: 'image/png' });
 
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -819,7 +839,7 @@ export class StrataCore {
     // 3. Re-apply critical styles to ensure the video fills the new container
     this.video.style.width = '100%';
     this.video.style.height = '100%';
-    this.video.style.objectFit = this.store.get().isAutoSized ? 'cover' : 'contain';
+    this.video.style.objectFit = this.store.get().videoFit;
     this.video.style.backgroundColor = 'black';
 
     // Apply potentially persisted aspect ratio
@@ -1148,14 +1168,27 @@ export class StrataCore {
     }
   }
 
+  setVideoFit(fit: VideoFit) {
+    this.store.setState({ videoFit: fit });
+    this.video.style.objectFit = fit;
+    // We also re-trigger aspect ratio calculation as it depends on container/video sizes
+    this.updateAspectRatio();
+  }
+
+  setBrightness(val: number) {
+    const safe = Math.max(0, Math.min(val, 2)); // Cap at 200%
+    this.store.setState({ brightness: safe });
+    this.video.style.filter = `brightness(${safe})`;
+  }
+
   private updateAspectRatio() {
     if (!this.container) return;
-    const { aspectRatio, isAutoSized } = this.store.get();
+    const { aspectRatio, videoFit } = this.store.get();
 
     if (aspectRatio === 'default') {
       this.video.style.width = '100%';
       this.video.style.height = '100%';
-      this.video.style.objectFit = isAutoSized ? 'cover' : 'contain';
+      this.video.style.objectFit = videoFit;
       return;
     }
 
@@ -1186,7 +1219,7 @@ export class StrataCore {
 
     this.video.style.width = `${finalW}px`;
     this.video.style.height = `${finalH}px`;
-    this.video.style.objectFit = 'fill';
+    this.video.style.objectFit = 'fill'; // When forcing aspect ratio box, we usually want fill
   }
 
   private initCast() {

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem } from '../core/StrataCore';
+import { StrataCore, PlayerState, TextTrackConfig, SubtitleSettings, PlayerTheme, StrataConfig, getResolvedState, DEFAULT_STATE, IPlugin, PlayerSource, ControlItem, ContextMenuItem, SettingItem, VideoFit } from '../core/StrataCore';
 import { formatTime, parseVTT, ThumbnailCue } from '../utils/playerUtils';
 import { useTransition } from './hooks/useTransition';
 import { NotificationContainer } from './components/NotificationContainer';
@@ -18,7 +18,7 @@ import {
     LoaderIcon, CastIcon, UsersIcon, PaletteIcon, CheckIcon,
     CustomizeIcon, CameraIcon, LockIcon, UnlockIcon, WebFullscreenIcon,
     FastForwardIcon, RatioIcon, ExpandIcon, InfoIcon,
-    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon, QualityIcon, VideoFlipIcon, FileCheckIcon
+    ServerIcon, LayersIcon, CropIcon, SpeakerIcon, FlipIcon, GaugeIcon, MusicIcon, WifiIcon, AlertCircleIcon, QualityIcon, VideoFlipIcon, FileCheckIcon, SunIcon, LayoutTemplateIcon
 } from './Icons';
 
 declare module 'react' {
@@ -180,6 +180,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
     const [isVolumeScrubbing, setIsVolumeScrubbing] = useState(false);
     const [isVolumeHovered, setIsVolumeHovered] = useState(false);
     const [isVolumeLocked, setIsVolumeLocked] = useState(false); // For mobile/touch
+    
+    // Brightness Gesture State
+    const [isBrightnessAdjusting, setIsBrightnessAdjusting] = useState(false);
 
     const [thumbnailCues, setThumbnailCues] = useState<ThumbnailCue[]>([]);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -195,7 +198,11 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
 
     // Gesture Refs
     const touchStartX = useRef<number | null>(null);
+    const touchStartY = useRef<number | null>(null);
     const touchStartTime = useRef<number>(0);
+    const touchStartVolume = useRef<number>(0);
+    const touchStartBrightness = useRef<number>(0);
+    const gestureModeRef = useRef<'seek' | 'volume' | 'brightness' | null>(null);
     const isDraggingRef = useRef(false);
 
     const clickTimeoutRef = useRef<any>(null);
@@ -269,6 +276,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (config.theme !== undefined && config.theme !== state.theme) updates.theme = config.theme;
         if (config.themeColor !== undefined && config.themeColor !== state.themeColor) updates.themeColor = config.themeColor;
         if (config.iconSize !== undefined && config.iconSize !== state.iconSize) updates.iconSize = config.iconSize;
+        if (config.brightness !== undefined && Math.abs(config.brightness - state.brightness) > 0.05) player.setBrightness(config.brightness);
 
         if (Object.keys(updates).length > 0) {
             player.setAppearance(updates);
@@ -279,7 +287,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             if (config.muted) player.video.muted = true;
             else { player.video.muted = false; }
         }
-    }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted]);
+    }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted, config.brightness]);
 
     useEffect(() => {
         if (!player) return;
@@ -400,7 +408,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
     }, [isFastForwarding, player]);
 
-    // --- Gesture Seek Logic ---
+    // --- Gesture Logic (Seek, Volume, Brightness) ---
     const handleTouchStart = (e: React.TouchEvent) => {
         startFastForward();
 
@@ -410,52 +418,98 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             return;
         }
 
-        if (useGestureSeek && !state.isLocked) {
-            touchStartX.current = e.touches[0].clientX;
-            touchStartTime.current = state.currentTime;
-            isDraggingRef.current = false;
-        }
+        if (state.isLocked) return;
+
+        touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+        
+        touchStartTime.current = state.currentTime;
+        touchStartVolume.current = state.volume;
+        touchStartBrightness.current = state.brightness;
+        
+        isDraggingRef.current = false;
+        gestureModeRef.current = null;
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        if (state.isLocked) return;
+        if (state.isLocked || !player) return;
+        if (touchStartX.current === null || touchStartY.current === null) return;
 
-        // If we are moving and gesture seek is enabled
-        if (useGestureSeek && touchStartX.current !== null) {
-            const deltaX = e.touches[0].clientX - touchStartX.current;
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+        const deltaX = clientX - touchStartX.current;
+        const deltaY = clientY - touchStartY.current; // Moving down is positive
 
-            // Threshold to start dragging
-            if (Math.abs(deltaX) > 10) {
-                // If we start dragging, cancel any pending fast forward
+        // Determine Gesture Mode if not yet set
+        if (!gestureModeRef.current) {
+            // Threshold
+            if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+                isDraggingRef.current = true;
+                // Stop any pending fast forward
                 stopFastForward();
 
-                isDraggingRef.current = true;
-                setIsScrubbing(true);
-
-                if (containerRef.current && state.duration) {
-                    const rect = containerRef.current.getBoundingClientRect();
-                    // Sensitivity: map drag distance to timeline progress directly relative to container width
-                    const deltaRatio = deltaX / rect.width;
-                    const newTime = Math.max(0, Math.min(state.duration, touchStartTime.current + (deltaRatio * state.duration)));
-                    setScrubbingTime(newTime);
+                // Determine direction
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    // Horizontal -> Seek (if enabled)
+                    if (useGestureSeek) {
+                        gestureModeRef.current = 'seek';
+                        setIsScrubbing(true);
+                    }
+                } else {
+                    // Vertical
+                    // Left half = Brightness, Right half = Volume
+                    const halfScreen = containerRef.current ? containerRef.current.clientWidth / 2 : window.innerWidth / 2;
+                    if (touchStartX.current < halfScreen) {
+                        gestureModeRef.current = 'brightness';
+                        setIsBrightnessAdjusting(true);
+                    } else {
+                        gestureModeRef.current = 'volume';
+                        setIsVolumeLocked(true); // Re-use volume lock state to show overlay
+                    }
                 }
             }
+        }
+
+        // Execute Gesture Logic
+        if (gestureModeRef.current === 'seek' && containerRef.current && state.duration) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const deltaRatio = deltaX / rect.width;
+            const newTime = Math.max(0, Math.min(state.duration, touchStartTime.current + (deltaRatio * state.duration)));
+            setScrubbingTime(newTime);
+        }
+        else if (gestureModeRef.current === 'volume') {
+            // Drag Up (negative deltaY) -> Increase volume
+            // Drag Down (positive deltaY) -> Decrease volume
+            // Sensitivity: Full height = 100% volume change
+            const sensitivity = 1.5; 
+            const deltaPct = -(deltaY / (containerRef.current?.clientHeight || 300)) * sensitivity;
+            player.setVolume(Math.max(0, Math.min(1, touchStartVolume.current + deltaPct)));
+        }
+        else if (gestureModeRef.current === 'brightness') {
+             // Drag Up -> Increase Brightness
+             // Max brightness usually 1.5 or 2.0 (150-200%). Let's cap at 2.0 (200%)
+             const sensitivity = 1.5;
+             const deltaPct = -(deltaY / (containerRef.current?.clientHeight || 300)) * sensitivity;
+             player.setBrightness(Math.max(0, Math.min(2, touchStartBrightness.current + deltaPct)));
         }
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
         stopFastForward();
 
-        if (useGestureSeek && isDraggingRef.current) {
+        if (gestureModeRef.current === 'seek') {
             player?.seek(scrubbingTime);
             setIsScrubbing(false);
-            isDraggingRef.current = false;
-            touchStartX.current = null;
-            // Prevent subsequent click event from toggling play
-            return;
+        } else if (gestureModeRef.current === 'volume') {
+            setIsVolumeLocked(false);
+        } else if (gestureModeRef.current === 'brightness') {
+            setIsBrightnessAdjusting(false);
         }
 
+        isDraggingRef.current = false;
+        gestureModeRef.current = null;
         touchStartX.current = null;
+        touchStartY.current = null;
     };
 
     const calculateTimeFromEvent = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
@@ -544,6 +598,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
 
         if (isVolumeLocked) setIsVolumeLocked(false);
+        if (isBrightnessAdjusting) setIsBrightnessAdjusting(false);
 
         // Wake up controls so lock button is visible if locked
         player.setControlsVisible(true);
@@ -896,9 +951,10 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     <MenuDivider />
 
                                     {/* Visual Adjustments */}
-                                    {useFlip && <MenuItem label="Flip" icon={<VideoFlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
+                                    <MenuItem label="Video Fit" icon={<LayoutTemplateIcon className="w-4 h-4" />} value={state.videoFit === 'none' ? 'Default' : state.videoFit.charAt(0).toUpperCase() + state.videoFit.slice(1)} onClick={() => setActiveMenu('videofit')} hasSubmenu />
                                     {useAspectRatio && <MenuItem label="Aspect Ratio" icon={<CropIcon className="w-4 h-4" />} value={state.aspectRatio} onClick={() => setActiveMenu('ratio')} hasSubmenu />}
-
+                                    {useFlip && <MenuItem label="Flip" icon={<VideoFlipIcon className="w-4 h-4" />} value={state.flipState.horizontal ? 'H' : state.flipState.vertical ? 'V' : 'Normal'} onClick={() => setActiveMenu('flip')} hasSubmenu />}
+                                    
                                     {/* Audio Tools */}
                                     <MenuItem label="Audio Boost" icon={<SpeakerIcon className="w-4 h-4" />} value={state.audioGain > 1 ? `${state.audioGain}x` : 'Off'} onClick={() => setActiveMenu('boost')} hasSubmenu />
 
@@ -981,7 +1037,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                 );
                             })()}
 
-                            {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio'].includes(activeMenu) && (
+                            {['speed', 'quality', 'audio', 'boost', 'party', 'appearance', 'sources', 'flip', 'ratio', 'videofit'].includes(activeMenu) && (
                                 <div className="animate-in slide-in-from-right-4 fade-in duration-200">
                                     {activeMenu === 'sources' && (
                                         <>
@@ -1022,9 +1078,20 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                     {activeMenu === 'ratio' && (
                                         <>
                                             <MenuHeader label="Aspect Ratio" onBack={() => setActiveMenu('main')} />
-                                            {['default', '16:9', '4:3'].map(r => (
-                                                <MenuItem key={r} label={r === 'default' ? 'Default' : r} active={state.aspectRatio === r} onClick={() => player?.setAspectRatio(r)} />
-                                            ))}
+                                            <div className="max-h-[250px] overflow-y-auto hide-scrollbar">
+                                                {['default', '16:9', '4:3', '21:9', '18:9', '1:1', '9:16'].map(r => (
+                                                    <MenuItem key={r} label={r === 'default' ? 'Default' : r.replace(':', ' : ')} active={state.aspectRatio === r} onClick={() => player?.setAspectRatio(r)} />
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                    {activeMenu === 'videofit' && (
+                                        <>
+                                            <MenuHeader label="Video Fit" onBack={() => setActiveMenu('main')} />
+                                            <MenuItem label="Contain (Default)" value="Fit" active={state.videoFit === 'contain'} onClick={() => player?.setVideoFit('contain')} />
+                                            <MenuItem label="Cover" value="Zoom" active={state.videoFit === 'cover'} onClick={() => player?.setVideoFit('cover')} />
+                                            <MenuItem label="Fill" value="Stretch" active={state.videoFit === 'fill'} onClick={() => player?.setVideoFit('fill')} />
+                                            <MenuItem label="None" value="Original" active={state.videoFit === 'none'} onClick={() => player?.setVideoFit('none')} />
                                         </>
                                     )}
                                     {activeMenu === 'party' && (<><MenuHeader label="Watch Party" onBack={() => setActiveMenu('main')} /><div className="p-4 space-y-3"><p className="text-xs text-zinc-400 leading-relaxed">Create a synchronized room on WatchParty.me to watch together.</p><a href={`https://www.watchparty.me/create?video=${encodeURIComponent(state.sources[state.currentSourceIndex]?.url || src || '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full py-2.5 bg-[var(--accent)] hover:opacity-90 text-white font-medium transition-opacity text-xs" style={{ borderRadius: 'var(--radius)' }}>Create Room</a></div></>)}
@@ -1032,6 +1099,17 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                                         <>
                                             <MenuHeader label="Appearance" onBack={() => setActiveMenu('main')} />
                                             <div className="pb-1">
+                                                <div className="px-1 pt-1">
+                                                    <Slider 
+                                                        label="Brightness"
+                                                        icon={<SunIcon className="w-4 h-4" />}
+                                                        value={state.brightness}
+                                                        min={0} max={2} step={0.1}
+                                                        onChange={(val: number) => player?.setBrightness(val)}
+                                                        formatValue={(v: number) => `${Math.round(v * 100)}%`}
+                                                    />
+                                                </div>
+
                                                 <SettingsGroup title="Theme">
                                                     <div className="grid grid-cols-2 gap-2 px-3">
                                                         {THEMES.map(theme => (
@@ -1096,7 +1174,13 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             { html: 'Aspect Ratio', isLabel: true },
             { html: 'Default', checked: state.aspectRatio === 'default', onClick: () => player?.setAspectRatio('default') },
             { html: '16:9', checked: state.aspectRatio === '16:9', onClick: () => player?.setAspectRatio('16:9') },
-            { html: '4:3', checked: state.aspectRatio === '4:3', onClick: () => player?.setAspectRatio('4:3') },
+            { html: '21:9', checked: state.aspectRatio === '21:9', onClick: () => player?.setAspectRatio('21:9') },
+            { separator: true },
+            
+            // Video Fit Group
+            { html: 'Video Fit', isLabel: true },
+            { html: 'Contain', checked: state.videoFit === 'contain', onClick: () => player?.setVideoFit('contain') },
+            { html: 'Cover', checked: state.videoFit === 'cover', onClick: () => player?.setVideoFit('cover') },
             { separator: true },
 
             // Stats
@@ -1126,7 +1210,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         });
 
         return items;
-    }, [config.contextmenu, state.aspectRatio, state.isLooping, player]);
+    }, [config.contextmenu, state.aspectRatio, state.isLooping, state.videoFit, player]);
 
     const isWebFs = state.isWebFullscreen;
 
@@ -1313,6 +1397,28 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                         <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 z-40 animate-in fade-in zoom-in duration-200 pointer-events-none">
                             <FastForwardIcon className="w-4 h-4 text-[var(--accent)] fill-current" />
                             <span className="text-xs font-bold tracking-wider">2x Speed</span>
+                        </div>
+                    )}
+                    
+                    {/* Volume Overlay (Gestures) */}
+                    {isVolumeLocked && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 backdrop-blur-md p-6 rounded-2xl flex flex-col items-center gap-4 z-40 animate-in fade-in zoom-in duration-200 pointer-events-none">
+                            {state.isMuted || state.volume === 0 ? <VolumeMuteIcon className="w-10 h-10 text-white/80" /> : <VolumeHighIcon className="w-10 h-10 text-white/80" />}
+                            <div className="w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-[var(--accent)]" style={{ width: `${state.isMuted ? 0 : state.volume * 100}%` }} />
+                            </div>
+                            <span className="text-xl font-bold font-mono">{Math.round(state.volume * 100)}%</span>
+                        </div>
+                    )}
+                    
+                    {/* Brightness Overlay (Gestures) */}
+                    {isBrightnessAdjusting && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 backdrop-blur-md p-6 rounded-2xl flex flex-col items-center gap-4 z-40 animate-in fade-in zoom-in duration-200 pointer-events-none">
+                            <SunIcon className="w-10 h-10 text-white/80" />
+                            <div className="w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, state.brightness * 100)}%` }} />
+                            </div>
+                            <span className="text-xl font-bold font-mono">{Math.round(state.brightness * 100)}%</span>
                         </div>
                     )}
 

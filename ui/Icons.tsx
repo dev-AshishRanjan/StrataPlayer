@@ -487,6 +487,28 @@ export const FileWarningIcon = ({ className }: { className?: string }) => (
   </Icon>
 );
 
+export const SunIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <circle cx="12" cy="12" r="5" />
+    <path d="M12 1v2" />
+    <path d="M12 21v2" />
+    <path d="M4.22 4.22l1.42 1.42" />
+    <path d="M18.36 18.36l1.42 1.42" />
+    <path d="M1 12h2" />
+    <path d="M21 12h2" />
+    <path d="M4.22 19.78l1.42-1.42" />
+    <path d="M18.36 5.64l1.42-1.42" />
+  </Icon>
+);
+
+export const LayoutTemplateIcon = ({ className }: { className?: string }) => (
+  <Icon className={className}>
+    <rect width="18" height="7" x="3" y="3" rx="1" />
+    <rect width="9" height="7" x="3" y="14" rx="1" />
+    <rect width="5" height="7" x="16" y="14" rx="1" />
+  </Icon>
+);
+
 // Custom Composite Icons (Reusing Base Icons + Text)
 export const Replay10Icon = ({ className }: { className?: string }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
