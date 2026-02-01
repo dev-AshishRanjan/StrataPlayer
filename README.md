@@ -172,7 +172,9 @@ The `<StrataPlayer />` component accepts the following configuration options.
 | **themeColor** | `string`      | `'#6366f1'` | Primary accent color (Hex, RGB).                 |
 | **iconSize**   | `string`      | `'medium'`  | `'small'`, `'medium'`, or `'large'`.             |
 | **backdrop**   | `boolean`     | `true`      | Enable background blur effects in menus.         |
-| **autoSize**   | `boolean`     | `false`     | Toggles `object-fit: cover`.                     |
+| **autoSize**   | `boolean`     | `false`     | Toggles `object-fit: cover`. (Legacy: use `videoFit`) |
+| **videoFit**   | `string`      | `'contain'` | Sets initial video scaling (`contain`, `cover`, `fill`, `none`). |
+| **brightness** | `number`      | `1`         | Initial video brightness filter (0.0 to 2.0).    |
 | **highlight**  | `Highlight[]` | `[]`        | Markers to display on the timeline.              |
 
 ### Functionality & Controls
@@ -253,4 +255,3 @@ Contributions are welcome! Please follow these steps:
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
-

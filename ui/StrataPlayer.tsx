@@ -277,6 +277,9 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         if (config.themeColor !== undefined && config.themeColor !== state.themeColor) updates.themeColor = config.themeColor;
         if (config.iconSize !== undefined && config.iconSize !== state.iconSize) updates.iconSize = config.iconSize;
         if (config.brightness !== undefined && Math.abs(config.brightness - state.brightness) > 0.05) player.setBrightness(config.brightness);
+        
+        // Update Video Fit if prop changes
+        if (config.videoFit !== undefined && config.videoFit !== state.videoFit) player.setVideoFit(config.videoFit);
 
         if (Object.keys(updates).length > 0) {
             player.setAppearance(updates);
@@ -287,7 +290,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
             if (config.muted) player.video.muted = true;
             else { player.video.muted = false; }
         }
-    }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted, config.brightness]);
+    }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted, config.brightness, config.videoFit]);
 
     useEffect(() => {
         if (!player) return;

@@ -212,6 +212,7 @@ export interface StrataConfig {
   backdrop?: boolean; // Blur effect
   autoSize?: boolean; // object-fit: cover logic (Legacy)
   brightness?: number; // Initial brightness
+  videoFit?: VideoFit; // Initial video fit
 
   // Subtitles
   subtitleSettings?: Partial<SubtitleSettings>;
@@ -307,10 +308,8 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     ...(config.subtitleSettings || {})
   };
 
-  // Determine initial video fit
-  let initialFit: VideoFit = 'contain';
-  if (config.autoSize) initialFit = 'cover';
-  if (saved.videoFit) initialFit = saved.videoFit;
+  // Determine initial video fit (Priority: config.videoFit > config.autoSize > saved.videoFit > default)
+  const resolvedVideoFit = config.videoFit ?? (config.autoSize ? 'cover' : undefined) ?? saved.videoFit ?? DEFAULT_STATE.videoFit;
 
   return {
     ...DEFAULT_STATE,
@@ -326,7 +325,7 @@ export const getResolvedState = (config: StrataConfig = {}): PlayerState => {
     subtitleSettings: mergedSubtitleSettings,
     // Config overrides state for these visual modes
     isAutoSized: config.autoSize ?? DEFAULT_STATE.isAutoSized,
-    videoFit: initialFit,
+    videoFit: resolvedVideoFit,
     brightness: config.brightness ?? saved.brightness ?? DEFAULT_STATE.brightness,
     isLive: config.isLive ?? saved.isLive ?? DEFAULT_STATE.isLive,
     isLooping: config.loop ?? saved.isLooping ?? DEFAULT_STATE.isLooping,

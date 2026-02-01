@@ -445,8 +445,24 @@ const UiPropsPage = () => (
       name="autoSize"
       type="boolean"
       defaultValue="false"
-      description="If true, uses object-fit: cover to fill the container, removing black bars."
+      description="Legacy prop. If true, sets videoFit to 'cover'. Use 'videoFit' instead."
       example={`<StrataPlayer\n  src="..."\n  autoSize={true}\n/>`}
+    />
+
+    <PropDoc
+      name="videoFit"
+      type="'contain' | 'cover' | 'fill' | 'none' | 'scale-down'"
+      defaultValue="'contain'"
+      description="Sets the initial video scaling strategy (CSS object-fit)."
+      example={`<StrataPlayer\n  src="..."\n  videoFit="cover"\n/>`}
+    />
+
+    <PropDoc
+      name="brightness"
+      type="number"
+      defaultValue="1.0"
+      description="Sets the initial brightness filter (0.0 to 2.0)."
+      example={`<StrataPlayer\n  src="..."\n  brightness={1.2}\n/>`}
     />
 
     <PropDoc
@@ -666,8 +682,8 @@ const ControlsPage = () => (
               {
                 html: 'Nested Options',
                 children: [
-                  { html: 'Level 2 - Item A', onClick: () => alert('Selected Item A') },
-                  { html: 'Level 2 - Item B', onClick: () => alert('Selected Item B') }
+                   { html: 'Level 2 - Item A', onClick: () => alert('Selected Item A') },
+                   { html: 'Level 2 - Item B', onClick: () => alert('Selected Item B') }
                 ]
               }
             ]
