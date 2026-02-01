@@ -1,6 +1,6 @@
 {
   "name": "strataplayer",
-  "version": "1.2.21",
+  "version": "1.2.22",
   "description": "A modern, framework-agnostic media engine for the web. Supports HLS, DASH, MPEG-TS, and WebTorrent with a plugin-based architecture and React integration.",
   "type": "module",
   "main": "./dist/strataplayer.cjs.js",
