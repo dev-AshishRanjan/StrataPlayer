@@ -1134,7 +1134,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         <div
             id={config.id}
             ref={containerRef}
-            className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset flex items-center justify-center ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius)]'} ${config.container || ''}`}
+            className={`group bg-black overflow-hidden select-none font-[family-name:var(--font-main)] outline-none text-zinc-100 strata-player-reset flex items-center justify-center ${isWebFs ? 'fixed inset-0 z-[2147483647] w-screen h-screen rounded-none' : 'relative w-full h-full rounded-[var(--radius-player)]'} ${config.container || ''}`}
             // touch-action: manipulation improves tap response
             style={{ touchAction: 'manipulation', '--accent': state.themeColor, '--accent-contrast': accentContrast } as React.CSSProperties}
             onMouseMove={handleMouseMove}
@@ -1162,6 +1162,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --radius-lg: 0.75rem;
                     --radius-sm: 0.375rem;
                     --radius-full: 9999px;
+                    --radius-player: 0.25rem;
                     --font-main: "Inter", sans-serif;
                     --border-width: 0px;
                     --bg-panel: rgba(9, 9, 11, 0.95);
@@ -1174,6 +1175,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --radius-lg: 0px;
                     --radius-sm: 0px;
                     --radius-full: 0px;
+                    --radius-player: 0px;
                     --font-main: "Press Start 2P", cursive;
                     --border-width: 2px;
                     --bg-panel: #000000;
@@ -1187,6 +1189,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --radius-lg: 6px;
                     --radius-sm: 2px;
                     --radius-full: 4px;
+                    --radius-player: 4px;
                     --font-main: "Cinzel", serif;
                     --border-width: 1px;
                     --bg-panel: #0a0a0a;
@@ -1199,6 +1202,7 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
                     --radius-lg: 0px;
                     --radius-sm: 0px;
                     --radius-full: 0px;
+                    --radius-player: 0px;
                     --font-main: "JetBrains Mono", monospace;
                     --border-width: 1px;
                     --bg-panel: #000000;

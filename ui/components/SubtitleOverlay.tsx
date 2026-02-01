@@ -27,7 +27,7 @@ export const SubtitleOverlay = ({
 
   return (
     <div
-      className="absolute inset-x-0 flex flex-col items-center justify-end text-center z-10 pointer-events-none transition-all duration-200"
+      className="absolute inset-x-0 flex flex-col items-center justify-end text-center z-10 pointer-events-none transition-all duration-200 strata-subtitle-overlay"
       style={{
         bottom: `${settings.verticalOffset}px`,
       }}

@@ -347,7 +347,7 @@ export class StrataCore {
   private trackConfigs: TextTrackConfig[] = [];
 
   // Download Control
-  private currentDownloadController: AbortController | null = null;
+  private activeDownloads = new Map<string, AbortController>();
 
   // Cast
   private castInitialized = false;
@@ -1380,11 +1380,19 @@ export class StrataCore {
     this.notify({ type: 'info', message: `Subtitle Offset: ${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`, duration: 1500 });
   }
 
-  cancelDownload() {
-    if (this.currentDownloadController) {
-      this.currentDownloadController.abort();
-      this.currentDownloadController = null;
+  cancelDownload(id?: string) {
+    if (id && this.activeDownloads.has(id)) {
+      this.activeDownloads.get(id)?.abort();
+      this.activeDownloads.delete(id);
       this.notify({ type: 'info', message: 'Download cancelled', duration: 2000 });
+      this.removeNotification(id);
+    } else if (!id) {
+      // Legacy/Fallback: cancel all
+      if (this.activeDownloads.size > 0) {
+        this.activeDownloads.forEach(c => c.abort());
+        this.activeDownloads.clear();
+        this.notify({ type: 'info', message: 'All downloads cancelled', duration: 2000 });
+      }
     }
   }
 
@@ -1405,21 +1413,19 @@ export class StrataCore {
       return;
     }
 
-    // Abort previous download if active
-    if (this.currentDownloadController) {
-      this.currentDownloadController.abort();
-    }
+    const notifId = Math.random().toString(36).substr(2, 9);
+    const controller = new AbortController();
+    this.activeDownloads.set(notifId, controller);
+    const signal = controller.signal;
 
-    this.currentDownloadController = new AbortController();
-    const signal = this.currentDownloadController.signal;
-
-    const notifId = this.notify({
+    this.notify({
+      id: notifId,
       type: 'loading',
-      message: 'Preparing download', // Removed ...
+      message: 'Preparing download',
       progress: 0,
       action: {
         label: 'Cancel',
-        onClick: () => this.cancelDownload()
+        onClick: () => this.cancelDownload(notifId)
       }
     });
 
@@ -1435,6 +1441,7 @@ export class StrataCore {
 
       // Sliding window for smoothing speed: Store [timestamp, totalLoaded]
       const progressSamples: { time: number, loaded: number }[] = [];
+      let lastUpdate = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1443,51 +1450,56 @@ export class StrataCore {
         loaded += value.length;
         if (total) {
           const now = Date.now();
-          const percent = Math.round((loaded / total) * 100);
 
-          // Add sample
-          progressSamples.push({ time: now, loaded });
+          // Debounce updates: update every 800ms or if complete
+          if (now - lastUpdate > 800 || loaded === total) {
+            lastUpdate = now;
+            const percent = Math.round((loaded / total) * 100);
 
-          // Remove samples older than 5 seconds
-          while (progressSamples.length > 0 && now - progressSamples[0].time > 5000) {
-            progressSamples.shift();
-          }
+            // Add sample
+            progressSamples.push({ time: now, loaded });
 
-          let etaSuffix = '';
-
-          // Calculate speed based on sliding window
-          let rate = 0; // bytes per ms
-
-          if (progressSamples.length > 1) {
-            const oldest = progressSamples[0];
-            const newest = progressSamples[progressSamples.length - 1];
-            const timeDiff = newest.time - oldest.time;
-            const bytesDiff = newest.loaded - oldest.loaded;
-            if (timeDiff > 0) rate = bytesDiff / timeDiff;
-          } else {
-            // Fallback to overall average if not enough samples
-            const elapsed = now - startTime;
-            if (elapsed > 0) rate = loaded / elapsed;
-          }
-
-          if (rate > 0) {
-            const remaining = total - loaded;
-            const etaMs = remaining / rate;
-            // Format with newline for visibility
-            etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
-          }
-
-          this.notify({
-            id: notifId,
-            type: 'loading',
-            // Cleaned string
-            message: `${etaSuffix}`,
-            progress: percent,
-            action: {
-              label: 'Cancel',
-              onClick: () => this.cancelDownload()
+            // Remove samples older than 5 seconds
+            while (progressSamples.length > 0 && now - progressSamples[0].time > 5000) {
+              progressSamples.shift();
             }
-          });
+
+            let etaSuffix = '';
+
+            // Calculate speed based on sliding window
+            let rate = 0; // bytes per ms
+
+            if (progressSamples.length > 1) {
+              const oldest = progressSamples[0];
+              const newest = progressSamples[progressSamples.length - 1];
+              const timeDiff = newest.time - oldest.time;
+              const bytesDiff = newest.loaded - oldest.loaded;
+              if (timeDiff > 0) rate = bytesDiff / timeDiff;
+            } else {
+              // Fallback to overall average if not enough samples
+              const elapsed = now - startTime;
+              if (elapsed > 0) rate = loaded / elapsed;
+            }
+
+            if (rate > 0) {
+              const remaining = total - loaded;
+              const etaMs = remaining / rate;
+              // Format with newline for visibility
+              etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
+            }
+
+            this.notify({
+              id: notifId,
+              type: 'loading',
+              // Cleaned string
+              message: `${etaSuffix}`,
+              progress: percent,
+              action: {
+                label: 'Cancel',
+                onClick: () => this.cancelDownload(notifId)
+              }
+            });
+          }
         }
       }
       const blob = new Blob(chunks);
@@ -1510,20 +1522,22 @@ export class StrataCore {
         window.open(src, '_blank');
       }
     } finally {
-      this.currentDownloadController = null;
+      this.activeDownloads.delete(notifId);
     }
   }
 
   async downloadHls(url: string, format: 'ts' | 'mp4') {
-    if (this.currentDownloadController) this.currentDownloadController.abort();
-    this.currentDownloadController = new AbortController();
-    const signal = this.currentDownloadController.signal;
+    const notifId = Math.random().toString(36).substr(2, 9);
+    const controller = new AbortController();
+    this.activeDownloads.set(notifId, controller);
+    const signal = controller.signal;
 
-    const notifId = this.notify({
+    this.notify({
+      id: notifId,
       type: 'loading',
-      message: 'Analyzing HLS stream', // Removed ...
+      message: 'Analyzing HLS stream',
       progress: 0,
-      action: { label: 'Cancel', onClick: () => this.cancelDownload() }
+      action: { label: 'Cancel', onClick: () => this.cancelDownload(notifId) }
     });
 
     try {
@@ -1613,7 +1627,7 @@ export class StrataCore {
           if (e.name === 'AbortError') {
             this.removeNotification(notifId);
             this.notify({ type: 'info', message: 'Download cancelled', duration: 2000 });
-            this.currentDownloadController = null;
+            this.activeDownloads.delete(notifId);
             return;
           }
           // User cancelled or not supported, fallback to memory
@@ -1627,52 +1641,57 @@ export class StrataCore {
 
       // Sliding window for segment processing speed
       const segmentSamples: { time: number, count: number }[] = [];
+      let lastUpdate = 0;
 
       for (let i = 0; i < segments.length; i++) {
         if (signal.aborted) break;
 
-        const progress = Math.round(((i + 1) / segments.length) * 100);
-
-        // Add sample
         const now = Date.now();
-        segmentSamples.push({ time: now, count: i + 1 });
+        // Debounce: update every 800ms or first/last segment
+        if (now - lastUpdate > 800 || i === 0 || i === segments.length - 1) {
+          lastUpdate = now;
+          const progress = Math.round(((i + 1) / segments.length) * 100);
 
-        // Remove samples older than 5 seconds
-        while (segmentSamples.length > 0 && now - segmentSamples[0].time > 5000) {
-          segmentSamples.shift();
-        }
+          // Add sample
+          segmentSamples.push({ time: now, count: i + 1 });
 
-        let etaSuffix = '';
+          // Remove samples older than 5 seconds
+          while (segmentSamples.length > 0 && now - segmentSamples[0].time > 5000) {
+            segmentSamples.shift();
+          }
 
-        if (segmentSamples.length > 1) {
-          const oldest = segmentSamples[0];
-          const newest = segmentSamples[segmentSamples.length - 1];
-          const timeDiff = newest.time - oldest.time;
-          const countDiff = newest.count - oldest.count;
+          let etaSuffix = '';
 
-          if (timeDiff > 0 && countDiff > 0) {
-            const msPerSegment = timeDiff / countDiff;
-            const remainingSegments = segments.length - (i + 1);
-            const etaMs = remainingSegments * msPerSegment;
+          if (segmentSamples.length > 1) {
+            const oldest = segmentSamples[0];
+            const newest = segmentSamples[segmentSamples.length - 1];
+            const timeDiff = newest.time - oldest.time;
+            const countDiff = newest.count - oldest.count;
+
+            if (timeDiff > 0 && countDiff > 0) {
+              const msPerSegment = timeDiff / countDiff;
+              const remainingSegments = segments.length - (i + 1);
+              const etaMs = remainingSegments * msPerSegment;
+              etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
+            }
+          } else if (i > 0) {
+            // Fallback
+            const elapsed = now - startTime;
+            const avgTime = elapsed / i;
+            const remaining = segments.length - i;
+            const etaMs = remaining * avgTime;
             etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
           }
-        } else if (i > 0) {
-          // Fallback
-          const elapsed = now - startTime;
-          const avgTime = elapsed / i;
-          const remaining = segments.length - i;
-          const etaMs = remaining * avgTime;
-          etaSuffix = `\n${this.formatDuration(etaMs)} remaining`;
-        }
 
-        this.notify({
-          id: notifId,
-          type: 'loading',
-          // Cleaned string
-          message: `Downloading segment ${i + 1}/${segments.length}${etaSuffix}`,
-          progress: progress,
-          action: { label: 'Cancel', onClick: () => this.cancelDownload() }
-        });
+          this.notify({
+            id: notifId,
+            type: 'loading',
+            // Cleaned string
+            message: `Downloading segment ${i + 1}/${segments.length}${etaSuffix}`,
+            progress: progress,
+            action: { label: 'Cancel', onClick: () => this.cancelDownload(notifId) }
+          });
+        }
 
         const segRes = await this.fetchWithRetry(segments[i], 3, undefined, signal);
         const buffer = await segRes.arrayBuffer();
@@ -1739,7 +1758,7 @@ export class StrataCore {
         this.notify({ id: notifId, type: 'error', message: `Download failed: ${e.message}`, duration: 4000 });
       }
     } finally {
-      this.currentDownloadController = null;
+      this.activeDownloads.delete(notifId);
     }
   }
 
@@ -1778,9 +1797,9 @@ export class StrataCore {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    if (this.currentDownloadController) {
-      this.currentDownloadController.abort();
-    }
+    // Cancel all downloads
+    this.activeDownloads.forEach(c => c.abort());
+    this.activeDownloads.clear();
 
     // Clean up web fullscreen scroll lock if active
     if (this.store.get().isWebFullscreen && typeof document !== 'undefined') {
