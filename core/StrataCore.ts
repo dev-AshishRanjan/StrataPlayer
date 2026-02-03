@@ -874,6 +874,53 @@ export class StrataCore {
     }
   }
 
+  /**
+   * Updates text tracks at runtime without reloading the video source.
+   * Useful for changing subtitles dynamically.
+   */
+  setTextTracks(tracks: TextTrackConfig[]) {
+    this.trackConfigs = tracks;
+    const currentSubtitleIndex = this.store.get().currentSubtitle;
+    const currentSubtitle = this.store.get().subtitleTracks[currentSubtitleIndex];
+
+    // 1. Map config to state, preserving status if possible
+    const newTracks: SubtitleTrackState[] = tracks.map((t, i) => {
+      // Check if we already have this track loaded to preserve status
+      const existing = this.store.get().subtitleTracks.find(st => st.src === t.src && st.label === t.label);
+      return {
+        ...t,
+        index: i,
+        status: existing ? existing.status : 'idle',
+        isDefault: !!t.default
+      };
+    });
+
+    this.store.setState({ subtitleTracks: newTracks });
+
+    // 2. Attempt to restore active subtitle by matching label/src
+    if (currentSubtitle) {
+      const newIndex = newTracks.findIndex(t => t.src === currentSubtitle.src && t.label === currentSubtitle.label);
+      if (newIndex !== -1) {
+        // Update index without reloading if status is success
+        this.store.setState({ currentSubtitle: newIndex });
+      } else {
+        // Track gone, disable or check for new default
+        const defaultIndex = newTracks.findIndex(t => t.default);
+        if (defaultIndex !== -1) {
+          this.setSubtitle(defaultIndex);
+        } else {
+          this.setSubtitle(-1);
+        }
+      }
+    } else {
+      // No active subtitle, check if new default appeared
+      const defaultIndex = newTracks.findIndex(t => t.default);
+      if (defaultIndex !== -1) {
+        this.setSubtitle(defaultIndex);
+      }
+    }
+  }
+
   switchSource(index: number) {
     const sources = this.store.get().sources;
     if (index >= 0 && index < sources.length) {

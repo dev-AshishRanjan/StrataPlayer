@@ -292,17 +292,29 @@ export const StrataPlayer = (props: StrataPlayerProps) => {
         }
     }, [player, config.theme, config.themeColor, config.iconSize, config.volume, config.muted, config.brightness, config.videoFit]);
 
+    // 1. Source Logic (Reloads Video)
     useEffect(() => {
         if (!player) return;
-        const tracks = textTracks || [];
+        // Only update if sources/src actually changed to avoid unnecessary reloads.
+        // We pass empty or current tracks here to ensure they are available on load,
+        // but subsequent track updates should use the separate effect.
+        const currentTracks = textTracks || [];
+
         if (sources && sources.length > 0) {
             setHasPlayed(false);
-            player.setSources(sources, tracks);
+            player.setSources(sources, currentTracks);
         } else if (src) {
             setHasPlayed(false);
-            player.setSources([{ url: src, type: type || 'auto' }], tracks);
+            player.setSources([{ url: src, type: type || 'auto' }], currentTracks);
         }
-    }, [src, type, sources, textTracks, player]);
+    }, [src, type, sources, player]); // REMOVED textTracks from dep array to prevent reload
+
+    // 2. Track Logic (Runtime Update, No Reload)
+    useEffect(() => {
+        if (!player || !textTracks) return;
+        // Use the specialized method to update tracks without reloading media
+        player.setTextTracks(textTracks);
+    }, [textTracks, player]);
 
     useEffect(() => {
         if (player && autoPlay) {
